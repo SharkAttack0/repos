@@ -4,6 +4,8 @@ use crate::CardSuits::*;
 use crate::CardValue::*;
 use crate::GameMode::*;
 use core::num;
+use std::fmt::write;
+use std::num::NonZeroI128;
 use rand::seq::SliceRandom;
 use std::default;
 use std::process::Termination;
@@ -11,8 +13,8 @@ use strum::*;
 
 const FIRST_CARD_DEALING_NUM: usize = 5;
 const SECOND_CARD_DEALING_NUM: usize = 3;
-const NO_TRUMPS_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Jack, Queen, King, Ten, Ace];
-const ALL_TRUMPS_ORDER: [CardValue; 8] = [Seven, Eight, Queen, King, Ten, Ace, Nine, Jack];
+const NO_TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Jack, Queen, King, Ten, Ace];
+const TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Queen, King, Ten, Ace, Nine, Jack];
 
 fn main() {
     // let (mut hands, mut deck) = Hands::new_game();
@@ -23,41 +25,79 @@ fn main() {
     };
     let goo = Card {
         value: Nine,
-        suit: Clubs,
+        suit: Spades,
     };
 
-    let mut gamemode = GameMode::NoTrumps;
-    let mut card_order: [CardValue; 8];
-    match gamemode {
-        TrumpClubs => card_order = NO_TRUMPS_ORDER,
-        TrumpDiamonds => card_order = NO_TRUMPS_ORDER,
-        TrumpHearts => card_order = NO_TRUMPS_ORDER,
-        TrumpSpades => card_order = NO_TRUMPS_ORDER,
-        NoTrumps => {
-            card_order = NO_TRUMPS_ORDER;
-            println!("NoTrumps initiated");
-        }
-        AllTrumps => card_order = ALL_TRUMPS_ORDER,
-    };
-    let foo_num = card_order.iter().position(|&r| r == foo.value).unwrap();
+    let game_mode: GameMode  = OneTrump(Clubs);
 
-    let goo_num = card_order.iter().position(|&r| r == goo.value).unwrap();
+    let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
+    cards_in_play.push(foo);
+    cards_in_play.push(goo);
 
-    if foo_num > goo_num {
-        println!("success!");
-    }
+    let card_strongest= cards_compare(cards_in_play, &game_mode);
+
+    println!("Strongest card is the {:?} of {:?}", card_strongest.value, card_strongest.suit);
 }
 
-fn compare_cards(foo: Card, goo: Card) {}
+fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
+    //takes vec of n Cards and game_mode, returns strongest - 
+    //CHANGE cards_in_play TO BE OF TYPE Vec<&Card> TO WORK WITH N NUMBER OF CARDS
 
+    //current problem: in order for this to work in all game modes (1 trump, no trumps, all trumps)
+    //trump_suit must either be of value no suit, 1 suit or all suits
+
+    let mut card_strongest_index: usize = 0;
+    let mut card_num: Vec<usize> = Vec::new();
+    let mut trump_suit = CardSuits::Clubs;
+    let mut trump_exists = false;
+    match game_mode {
+        OneTrump(trump) => {
+            trump_suit = *trump;
+            trump_exists = true;
+        },
+        NoTrumps => (),
+        AllTrumps => (),
+    };
+    //create vec with value of each card (value depending if its trump)
+    for card in cards_in_play.iter() {
+        if trump_exists {
+        if card.suit == trump_suit {
+            card_num.push(TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
+        } else {
+            card_num.push(NO_TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
+        }
+        }
+    }
+    let mut temp_card_strongest_value = card_num[0];
+    let mut trump_played = false;
+    
+    for (index, card) in cards_in_play.iter().enumerate() {
+        if card.suit == trump_suit {
+            //case 2 - No trumps played, current card is trump, DON'T compare
+            trump_played = true;
+            temp_card_strongest_value = card_num[index];
+            continue;
+        }
+        if trump_played == true && card.suit != trump_suit {
+            //case 3 - Trump played, current card non-trump, DON'T compare
+            continue;    
+        }
+        //compare current card with strongest one yet
+        if temp_card_strongest_value < card_num[index] {
+            temp_card_strongest_value = card_num[index];
+            card_strongest_index = index;
+        }    
+    }
+    cards_in_play[card_strongest_index]
+}
+
+#[derive(Debug, PartialEq)]
 enum GameMode {
-    TrumpClubs,
-    TrumpDiamonds,
-    TrumpHearts,
-    TrumpSpades,
+    OneTrump(CardSuits),
     NoTrumps,
     AllTrumps,
 }
+
 
 #[derive(Debug)]
 struct Hands {
@@ -77,6 +117,7 @@ impl Hands {
         }
     }
     fn add_cards(mut self, deck: &mut Vec<Card>, num_add: usize) -> Self {
+        //adds certain amount of cards to each hand and returns hands
         self.p1.extend(deck.iter().take(num_add));
         deck.drain(..num_add);
         self.p2.extend(deck.iter().take(num_add));
@@ -93,7 +134,7 @@ impl Hands {
     fn new_game() -> (Hands, Vec<Card>) {
         //creates new empty hands
         //creates new shuffled deck
-        //gives FIRST_CARD_DEALING_NUM cards to each hand from deck
+        //calls add_cards with FIRST_CARD_DEALING_NUM
         //prints hands and returns
         let mut hands = Hands::new();
         let mut deck = generate_full_deck();
@@ -103,9 +144,9 @@ impl Hands {
     }
     fn continue_game(mut self, deck: &mut Vec<Card>) -> Self {
         //adds 3 cards to each hand and returns
-        let hands = Hands::add_cards(self, deck, SECOND_CARD_DEALING_NUM);
-        Hands::print_hands(&hands);
-        hands
+        self = Hands::add_cards(self, deck, SECOND_CARD_DEALING_NUM);
+        Hands::print_hands(&self);
+        self
     }
 }
 
