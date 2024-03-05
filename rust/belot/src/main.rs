@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::default;
 use std::mem::swap;
+use std::usize;
 
 use crate::CardSuits::*;
 use crate::CardValue::*;
@@ -93,64 +94,49 @@ fn main() {
     let card_strongest = cards_compare(cards_in_play, &game_mode);
 
     hands.p4 = sort_hand(hands.p4, REGULAR_ORDER);
-    println!("p4 sorted: ");
-    Hands::print_hand(&hands, 3);
+    check_cards_iar(hands.p4);
 }
+fn cards_actual_value(hand: &Vec<Card>, sort_way: [CardValue; 8]) -> Vec<usize> {
+    let mut cards_actual_value: Vec<usize> = Vec::new();
+    for card in hand.iter() {
+        cards_actual_value.push(sort_way.iter().position(|&r| r == card.value).unwrap());
+    }
+    cards_actual_value
+}
+fn check_cards_iar(sorted_hand: Vec<Card>) {
+    let mut row_value: usize = 0;
+    let cards_actual_value = cards_actual_value(&sorted_hand, REGULAR_ORDER);
 
-fn check_for_cards_in_a_row(hand: &Vec<Card>) {
-    let mut cards_of_suit: Vec<CardValue> = Vec::new();
     for spec_suit in CardSuits::iter() {
-        for card in hand {
-            if card.suit == spec_suit {
-                cards_of_suit.push(card.value);
+        for index in 0..sorted_hand.len() - 1 {
+            if sorted_hand[index].suit != spec_suit {
+                continue;
+            }
+            if cards_actual_value[index] == cards_actual_value[index + 1] + 1 {
+                row_value += 1;
             }
         }
-    }
-}
-fn check_row(hand_one_suit: Vec<CardValue>) {
-    let mut row_value: usize = 0;
-    for (index, card_value) in hand_one_suit.iter().enumerate() {
-        if hand_one_suit.last().unwrap() == card_value {
-            break;
-        }
-        if card_value == &hand_one_suit[index + 1] {
-            row_value += 1;
+        if row_value == 3 {
+            println!("This hand has Terza");
+        } else if row_value == 4 {
+            println!("This hand has a Quarter");
+        } else if row_value == 5 {
+            println!("WOW! This hand has a Quinta");
         }
     }
-
-    if row_value == 3 {
-        println!("This hand has Terza");
-    } else if row_value == 4 {
-        println!("This hand has a Quarter");
-    } else if row_value == 5 {
-        println!("WOW! This hand has a Quinta");
-    }
-}
-
-fn compare_cards(a: Card, b: Card, mode: GameMode) -> Ordering {
-    Ordering::Less
 }
 
 fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
-    //maaan fix this shit
-    // proverqvash segashnata karta dali ima sushtata boq sys sledvashtata
-    // ako e:
-    //      ne razvalqsh streka
-    // ako ne e:
-    //      curr_card = elem
-
+    //takes hand, returns sorted (by suit, by value, weakest to strongest)
     let mut sorted_hand: Vec<Card> = Vec::new();
     let mut card_regular_value: Vec<usize> = Vec::new();
     for card in hand.iter() {
         card_regular_value.push(sort_way.iter().position(|&r| r == card.value).unwrap());
     }
 
-    println!("card_regular_value {:?}", card_regular_value);
-
     for index in 0..hand.len() {
         let mut smallest_card = card_regular_value[index];
         let mut temp_j = index;
-        println!("smallest_card {}, temp_j {} before", smallest_card, temp_j);
         for j in index + 1..hand.len() {
             if smallest_card > card_regular_value[j] {
                 smallest_card = card_regular_value[j];
@@ -158,7 +144,6 @@ fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
                 temp_j = j;
             }
         }
-        println!("smallest_card {}, temp_j {} after", smallest_card, temp_j);
         let mut temp = hand[index];
         hand[index] = hand[temp_j];
         hand[temp_j] = temp;
@@ -171,6 +156,7 @@ fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     for card in &hand {
         println!("{:?}\t {:?}", card.value, card.suit);
     }
+
     for spec_suit in CardSuits::iter() {
         for card in &hand {
             if card.suit != spec_suit {
