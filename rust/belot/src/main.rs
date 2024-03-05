@@ -104,24 +104,32 @@ fn cards_actual_value(hand: &Vec<Card>, sort_way: [CardValue; 8]) -> Vec<usize> 
     cards_actual_value
 }
 fn check_cards_iar(sorted_hand: Vec<Card>) {
-    let mut row_value: usize = 0;
     let cards_actual_value = cards_actual_value(&sorted_hand, REGULAR_ORDER);
+    //TO BE FIXED - QUEEN, KING, ACE... DOESNT RETURN TERZA
 
     for spec_suit in CardSuits::iter() {
+        let mut row_value: usize = 1;
+        let mut temp_row_value: usize = 1;
         for index in 0..sorted_hand.len() - 1 {
-            if sorted_hand[index].suit != spec_suit {
+            if sorted_hand[index].suit != spec_suit || sorted_hand[index + 1].suit != spec_suit {
                 continue;
             }
-            if cards_actual_value[index] == cards_actual_value[index + 1] + 1 {
-                row_value += 1;
+            if cards_actual_value[index] == cards_actual_value[index + 1] - 1 {
+                temp_row_value += 1;
+            } else {
+                row_value = temp_row_value;
+                temp_row_value = 1
             }
         }
-        if row_value == 3 {
-            println!("This hand has Terza");
-        } else if row_value == 4 {
-            println!("This hand has a Quarter");
-        } else if row_value == 5 {
-            println!("WOW! This hand has a Quinta");
+
+        match row_value {
+            3 => println!("This hand has Terza"),
+            4 => println!("This hand has a Quarter"),
+            5 => println!("WOW! This hand has a Quinta"),
+            6 => println!("WOW! This hand has a Quinta"),
+            7 => println!("WOW! This hand has a Quinta"),
+            8 => println!("WHAAT! 8 in a row! This hand has a Quinta AND a Terza"),
+            _ => {}
         }
     }
 }
@@ -129,10 +137,7 @@ fn check_cards_iar(sorted_hand: Vec<Card>) {
 fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     //takes hand, returns sorted (by suit, by value, weakest to strongest)
     let mut sorted_hand: Vec<Card> = Vec::new();
-    let mut card_regular_value: Vec<usize> = Vec::new();
-    for card in hand.iter() {
-        card_regular_value.push(sort_way.iter().position(|&r| r == card.value).unwrap());
-    }
+    let mut card_regular_value: Vec<usize> = cards_actual_value(&hand, sort_way);
 
     for index in 0..hand.len() {
         let mut smallest_card = card_regular_value[index];
@@ -153,9 +158,6 @@ fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     }
 
     let mut sorted_suit_hand: Vec<Card> = Vec::new();
-    for card in &hand {
-        println!("{:?}\t {:?}", card.value, card.suit);
-    }
 
     for spec_suit in CardSuits::iter() {
         for card in &hand {
@@ -250,10 +252,19 @@ impl Hands {
         deck.drain(..num_add);
         self.p4.extend(deck.iter().take(num_add));
         deck.drain(..num_add);
+
+        self.p1 = sort_hand(self.p1, REGULAR_ORDER);
+        self.p2 = sort_hand(self.p2, REGULAR_ORDER);
+        self.p3 = sort_hand(self.p3, REGULAR_ORDER);
+        self.p4 = sort_hand(self.p4, REGULAR_ORDER);
+
         self
     }
     fn iter(&self) -> Vec<&Vec<Card>> {
         vec![&self.p1, &self.p2, &self.p3, &self.p4]
+    }
+    fn iter_mut(&mut self) -> Vec<&mut Vec<Card>> {
+        vec![&mut self.p1, &mut self.p2, &mut self.p3, &mut self.p4]
     }
     fn print_all_hands(&self) {
         for (index, hand) in self.iter().iter().enumerate() {
