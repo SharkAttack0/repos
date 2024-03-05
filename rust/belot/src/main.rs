@@ -1,21 +1,67 @@
 #![allow(unused)]
 
+use std::cmp::Ordering;
+use std::default;
+use std::mem::swap;
+
 use crate::CardSuits::*;
 use crate::CardValue::*;
 use crate::GameMode::*;
-use std::fmt::write;
-use std::num::NonZeroI128;
-use std::default;
-use std::process::Termination;
 use rand::seq::SliceRandom;
 use strum::*;
-use core::num;
 
 const FIRST_CARD_DEALING_NUM: usize = 5;
 const SECOND_CARD_DEALING_NUM: usize = 3;
 const NO_TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Jack, Queen, King, Ten, Ace];
 const TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Queen, King, Ten, Ace, Nine, Jack];
+const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, King, Ace];
 
+#[derive(Debug, PartialEq)]
+enum GameMode {
+    OneTrump(CardSuits),
+    NoTrumps,
+    AllTrumps,
+}
+
+#[derive(Debug)]
+struct Hands {
+    p1: Vec<Card>,
+    p2: Vec<Card>,
+    p3: Vec<Card>,
+    p4: Vec<Card>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Card {
+    pub value: CardValue,
+    pub suit: CardSuits,
+}
+
+#[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
+pub enum CardSuits {
+    Clubs,
+    Diamonds,
+    Hearts,
+    Spades,
+}
+
+#[derive(Debug, EnumIter, Copy, Clone, PartialEq)]
+pub enum CardValue {
+    Seven,
+    Eight,
+    Nine,
+    Ten,
+    Jack,
+    Queen,
+    King,
+    Ace,
+}
+//can create and shuffle deck
+//can print all or one hand
+//can add cards to hands
+//can compare cards based on the game mode
+
+//to do: add beggining of actual game, check for Terza, Quarter, Quinta or Kare
 fn main() {
     let (mut hands, mut deck) = Hands::new_game();
     hands = Hands::continue_game(hands, &mut deck);
@@ -35,8 +81,8 @@ fn main() {
         value: Seven,
         suit: Clubs,
     };
-    
-    let game_mode: GameMode  = OneTrump(Diamonds);
+
+    let game_mode: GameMode = OneTrump(Diamonds);
 
     let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
     cards_in_play.push(foo);
@@ -44,22 +90,109 @@ fn main() {
     cards_in_play.push(doo);
     cards_in_play.push(soo);
 
-    let card_strongest= cards_compare(cards_in_play, &game_mode);
+    let card_strongest = cards_compare(cards_in_play, &game_mode);
 
-    println!("Strongest card is the {:?} of {:?}", card_strongest.value, card_strongest.suit);
+    hands.p4 = sort_hand(hands.p4, REGULAR_ORDER);
+    println!("p4 sorted: ");
+    Hands::print_hand(&hands, 3);
+}
+
+fn check_for_cards_in_a_row(hand: &Vec<Card>) {
+    let mut cards_of_suit: Vec<CardValue> = Vec::new();
+    for spec_suit in CardSuits::iter() {
+        for card in hand {
+            if card.suit == spec_suit {
+                cards_of_suit.push(card.value);
+            }
+        }
+    }
+}
+fn check_row(hand_one_suit: Vec<CardValue>) {
+    let mut row_value: usize = 0;
+    for (index, card_value) in hand_one_suit.iter().enumerate() {
+        if hand_one_suit.last().unwrap() == card_value {
+            break;
+        }
+        if card_value == &hand_one_suit[index + 1] {
+            row_value += 1;
+        }
+    }
+
+    if row_value == 3 {
+        println!("This hand has Terza");
+    } else if row_value == 4 {
+        println!("This hand has a Quarter");
+    } else if row_value == 5 {
+        println!("WOW! This hand has a Quinta");
+    }
+}
+
+fn compare_cards(a: Card, b: Card, mode: GameMode) -> Ordering {
+    Ordering::Less
+}
+
+fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
+    //maaan fix this shit
+    // proverqvash segashnata karta dali ima sushtata boq sys sledvashtata
+    // ako e:
+    //      ne razvalqsh streka
+    // ako ne e:
+    //      curr_card = elem
+
+    let mut sorted_hand: Vec<Card> = Vec::new();
+    let mut card_regular_value: Vec<usize> = Vec::new();
+    for card in hand.iter() {
+        card_regular_value.push(sort_way.iter().position(|&r| r == card.value).unwrap());
+    }
+
+    println!("card_regular_value {:?}", card_regular_value);
+
+    for index in 0..hand.len() {
+        let mut smallest_card = card_regular_value[index];
+        let mut temp_j = index;
+        println!("smallest_card {}, temp_j {} before", smallest_card, temp_j);
+        for j in index + 1..hand.len() {
+            if smallest_card > card_regular_value[j] {
+                smallest_card = card_regular_value[j];
+
+                temp_j = j;
+            }
+        }
+        println!("smallest_card {}, temp_j {} after", smallest_card, temp_j);
+        let mut temp = hand[index];
+        hand[index] = hand[temp_j];
+        hand[temp_j] = temp;
+        let mut temp_card_regular_value = card_regular_value[index];
+        card_regular_value[index] = card_regular_value[temp_j];
+        card_regular_value[temp_j] = temp_card_regular_value;
+    }
+
+    let mut sorted_suit_hand: Vec<Card> = Vec::new();
+    for card in &hand {
+        println!("{:?}\t {:?}", card.value, card.suit);
+    }
+    for spec_suit in CardSuits::iter() {
+        for card in &hand {
+            if card.suit != spec_suit {
+                continue;
+            }
+            sorted_suit_hand.push(*card);
+        }
+    }
+    sorted_suit_hand
 }
 
 fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
-    //takes vec of n Cards and game_mode, returns strongest 
+    //takes vec of n Cards and game_mode, returns strongest
     let mut card_strongest_index: usize = 0;
     let mut card_num: Vec<usize> = Vec::new();
-    let mut trump_suit = CardSuits::Clubs;
+    let mut trump_suit: CardSuits = Clubs;
     let mut one_trump = false;
     match game_mode {
         OneTrump(trump) => {
             trump_suit = *trump;
             one_trump = true;
-        },
+        }
         NoTrumps => (),
         AllTrumps => (),
     };
@@ -70,10 +203,20 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
                 if card.suit == trump_suit {
                     card_num.push(TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
                 } else {
-                    card_num.push(NO_TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
+                    card_num.push(
+                        NO_TRUMP_ORDER
+                            .iter()
+                            .position(|&r| r == card.value)
+                            .unwrap(),
+                    );
                 }
-            },
-            NoTrumps => card_num.push(NO_TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap()),
+            }
+            NoTrumps => card_num.push(
+                NO_TRUMP_ORDER
+                    .iter()
+                    .position(|&r| r == card.value)
+                    .unwrap(),
+            ),
             AllTrumps => card_num.push(TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap()),
         };
     }
@@ -88,7 +231,8 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
                 temp_card_strongest_value = card_num[index];
                 card_strongest_index = index;
                 continue;
-            } else if trump_played == true && card.suit != trump_suit {
+            }
+            if trump_played == true && card.suit != trump_suit {
                 //case 3 - Trump played, current card non-trump, DON'T compare
                 continue;
             }
@@ -96,7 +240,7 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
         if temp_card_strongest_value < card_num[index] {
             temp_card_strongest_value = card_num[index];
             card_strongest_index = index;
-        }    
+        }
     }
     cards_in_play[card_strongest_index]
 }
@@ -125,8 +269,9 @@ impl Hands {
     fn iter(&self) -> Vec<&Vec<Card>> {
         vec![&self.p1, &self.p2, &self.p3, &self.p4]
     }
-    fn print_hands(&self) {
-        for (index, hand) in self.iter().iter().enumerate() { //yea... fix that shi
+    fn print_all_hands(&self) {
+        for (index, hand) in self.iter().iter().enumerate() {
+            //yea... fix that shi
             println!("Hand #{}", index + 1);
             for card in hand.iter() {
                 println!("\t{:?}\t{:?}", card.value, card.suit);
@@ -134,7 +279,16 @@ impl Hands {
             println!();
         }
     }
-    fn new_game() -> (Hands, Vec<Card>) {
+    fn print_hand(&self, index: usize) {
+        println!("Hand #{}", index + 1);
+        let hand = self.iter()[index];
+        for card in hand.iter() {
+            println!("\t{:?}\t{:?}", card.value, card.suit);
+        }
+        println!();
+    }
+
+    fn new_game() -> (Self, Vec<Card>) {
         //creates new empty hands
         //creates new shuffled deck
         //calls add_cards with FIRST_CARD_DEALING_NUM
@@ -144,20 +298,18 @@ impl Hands {
         hands = Hands::add_cards(hands, &mut deck, FIRST_CARD_DEALING_NUM);
         println!("\nStarting a new game!");
         println!("Added 5 cards to each hand:\n");
-        Hands::print_hands(&hands);
+        Hands::print_all_hands(&hands);
         (hands, deck)
     }
     fn continue_game(mut self, deck: &mut Vec<Card>) -> Self {
         //adds 3 cards to each hand, prints and returns
         self = Hands::add_cards(self, deck, SECOND_CARD_DEALING_NUM);
         for (index, hand) in self.iter().iter().enumerate() {
-            for card in hand.iter() {
-                
-            }
-        } 
+            for card in hand.iter() {}
+        }
         println!("\nContinuing game!");
         println!("Added 3 more cards to each hand. Good luck!\n");
-        Hands::print_hands(&self);
+        Hands::print_all_hands(&self);
         self
     }
 }
@@ -176,45 +328,4 @@ fn generate_full_deck() -> Vec<Card> {
     deck.shuffle(&mut rng);
 
     deck
-}
-
-#[derive(Debug, PartialEq)]
-enum GameMode {
-    OneTrump(CardSuits),
-    NoTrumps,
-    AllTrumps,
-}
-
-#[derive(Debug)]
-struct Hands {
-    p1: Vec<Card>,
-    p2: Vec<Card>,
-    p3: Vec<Card>,
-    p4: Vec<Card>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Card {
-    pub value: CardValue,
-    pub suit: CardSuits,
-}
-
-#[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
-pub enum CardSuits {
-    Clubs,
-    Diamonds,
-    Hearts,
-    Spades,
-}
-
-#[derive(Debug, EnumIter, Copy, Clone, PartialEq)]
-pub enum CardValue {
-    Seven,
-    Eight,
-    Nine,
-    Ten,
-    Jack,
-    Queen,
-    King,
-    Ace,
 }
