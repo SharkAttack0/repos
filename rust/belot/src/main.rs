@@ -1,8 +1,8 @@
 #![allow(unused)]
 
-use core::panic;
 use std::default;
 use std::io;
+use std::iter;
 use std::mem::swap;
 use std::mem::take;
 use std::usize;
@@ -30,7 +30,7 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //TO BE DONE:
 //user input
 //player turns:
-//calls pre-game
+//bidding
 //playing a card on table (only when allowed)
 //restarting the game when everyone has passed
 //printing the table (cards in play)
@@ -77,27 +77,127 @@ mod tests {
                 suit: Spades,
             },
         ];
-        assert_eq!((), check_cards_sequence(result));
     }
 }
 fn main() {
-    let (mut hands, mut deck) = Hands::new_game();
-    hands = Hands::continue_game(hands, &mut deck);
-    let input = user_input();
-    println!("Before taking card: ");
-    print_hand(&hands.p1);
-    let mut cards_in_play = Vec::new();
-    print_cards_in_play(&cards_in_play, 0);
+    run();
+}
+//order of events:
+//1 - new deck, new hands, each of 5 cards
+//2 - bidding, restart if 4 passes
+//3 - add 3 cards to each hand
+//4 - start of game, first player plays card
+//5 - all other players respond, strongest card takes
+//6 - repeat until cards are over
+//7 - 2 vecs - of each team, count points
+//8 - add points to each team
+//9 - repeat with next player starting, until team has >=151 points
+//10 - repeat
+fn run() {
+    loop {
+        let (mut hands, mut deck) = new_game();
+        hands = continue_game(hands, &mut deck);
+        let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
+        let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
+        for card_index in 0..hands[0].len() {
+            for hand_index in 0..4 {
+                print_cards_in_play(&cards_in_play, 0);
+                println!("player #{}", hand_index + 1);
+                //PROBLEM: pushes the next card to the appropriate one
+                //(according to print_cards_in_play())
+                cards_in_play.push(ask_play_card(&mut hands[hand_index]));
+            }
+            print_cards_in_play(&cards_in_play, 0);
+            let win_hand_index = cards_compare(&cards_in_play, &AllTrumps);
+            //assume indexes 0 and 2 are of one team, as well as 1 and 3
+            if win_hand_index % 2 == 0 {
+                point_decks[0].append(&mut cards_in_play);
+            } else {
+                point_decks[1].append(&mut cards_in_play);
+            }
+        }
+        break;
+    }
+}
+//bidding - init player, calls,
+//next player - repeat
+//if raising bid is possible, ask each player again
+//on 3 passes in a row, start game, on 4 passes - restart
+fn bidding(hands: [Vec<Card>; 4], cur_highest_bid: GameMode) -> usize {
+    let mut ans_int: usize = 1;
+    let mut skip_bids;
+    match cur_highest_bid {
+        Pass => skip_bids = 0,
+        OneTrump(Clubs) => skip_bids = 1,
+        OneTrump(Diamonds) => skip_bids = 2,
+        OneTrump(Hearts) => skip_bids = 3,
+        OneTrump(Spades) => skip_bids = 4,
+        NoTrumps => skip_bids = 5,
+        AllTrumps => skip_bids = 6,
+    }
+    let game_mode_count = 7; //uch...
+
+    let mut bid;
+    match ans_int {
+        1 => bid = Pass,
+        2 => bid = AllTrumps,
+        3 => bid = NoTrumps,
+        4 => bid = OneTrump(Spades),
+        5 => bid = OneTrump(Hearts),
+        6 => bid = OneTrump(Diamonds),
+        7 => bid = OneTrump(Clubs),
+        _ => panic!("ans_int at bidding()"),
+    }
+    ans_int
 }
 
-fn run() {}
+fn print_bidding_options(cur_highest_bid: GameMode) {
+    println!("{:?}", Pass);
+    println!("{:?}", AllTrumps);
+    println!("{:?}", NoTrumps);
+    println!("{:?}", OneTrump(Spades));
+    println!("{:?}", OneTrump(Hearts));
+    println!("{:?}", OneTrump(Diamonds));
+    println!("{:?}", OneTrump(Clubs));
+}
 
 fn user_input() -> String {
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line!");
     input = String::from(input.trim());
-    println!("{input}");
     input
+}
+
+fn user_input_to_int(max_allowed_int: usize) -> usize {
+    let mut input_int;
+    loop {
+        let input = user_input();
+        let input_to_int = input.parse::<usize>();
+        match input_to_int {
+            Ok(int) => input_int = int,
+            Err(_) => {
+                println!("Error: invalid input!");
+                continue;
+            }
+        }
+        if input_int == 0 || input_int > max_allowed_int {
+            println!("Error: invalid number!");
+            continue;
+        }
+        break;
+    }
+    //subtract one so that input represents actual order #
+    input_int - 1
+}
+
+fn ask_play_card(hand: &mut Vec<Card>) -> Card {
+    let mut ans_int;
+    println!("Choose a card:");
+    print_hand(hand);
+    ans_int = user_input_to_int(hand.len());
+    take_card(hand, ans_int)
 }
 
 fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
@@ -116,35 +216,33 @@ fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
         let i = (index + first_card_index) % cards_in_play.len();
         println!(
             "\t\t\tp{}:{:?} {:?}",
-            index, cards_in_play[i].value, cards_in_play[i].suit
+            index + 1,
+            cards_in_play[i].value,
+            cards_in_play[i].suit
         );
     }
 }
 
 fn take_card(hand: &mut Vec<Card>, index: usize) -> Card {
-    if index >= hand.len() {
-        println!("Index is bigger than size of hand");
-        println!("taking out last card...");
-        hand.remove(hand.len() - 1)
-    } else {
-        hand.remove(index)
-    }
+    hand.remove(index)
 }
 
 fn print_hand(hand: &Vec<Card>) {
     for (index, card) in hand.iter().enumerate() {
         println!("{}:\t{:?}\t{:?}", index + 1, card.value, card.suit);
     }
+    println!();
 }
 
 fn cards_actual_value(hand: &Vec<Card>, sort_way: [CardValue; 8]) -> Vec<usize> {
+    //returns ints of cards' values according to a specified ordering
     let mut cards_actual_value: Vec<usize> = Vec::new();
     for card in hand.iter() {
         cards_actual_value.push(sort_way.iter().position(|&r| r == card.value).unwrap());
     }
     cards_actual_value
 }
-fn check_cards_sequence(hand: Vec<Card>) {
+fn check_cards_sequence(hand: &mut Vec<Card>) {
     //sorts hand, checks for cards in a row of same suit
     //DOESN'T WORK IN 1 CASE - IN CASE OF 2 SEQUENCES IN
     //SAME SUIT, WILL REGISTER ONLY 1 (excluding cases of quinte)
@@ -206,7 +304,7 @@ fn check_carre(hand: &Vec<Card>) {
     }
 }
 
-fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
+fn sort_hand(hand: &mut Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     //takes hand, returns sorted (by suit, by value, weakest to strongest)
     let mut sorted_hand: Vec<Card> = Vec::new();
     let mut card_regular_value: Vec<usize> = cards_actual_value(&hand, sort_way);
@@ -232,7 +330,7 @@ fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     let mut sorted_suit_hand: Vec<Card> = Vec::new();
 
     for spec_suit in CardSuits::iter() {
-        for card in &hand {
+        for card in hand.iter() {
             if card.suit != spec_suit {
                 continue;
             }
@@ -242,7 +340,7 @@ fn sort_hand(mut hand: Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     sorted_suit_hand
 }
 
-fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
+fn cards_compare(cards_in_play: &Vec<Card>, game_mode: &GameMode) -> usize {
     //takes vec of n Cards and game_mode, returns strongest
     let mut card_strongest_index: usize = 0;
     let mut card_num: Vec<usize> = Vec::new();
@@ -253,12 +351,13 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
             trump_suit = *trump;
             one_trump = true;
         }
-        NoTrumps => (),
-        AllTrumps => (),
+        Pass => panic!("Pass variant is not supposed to be possbible here!"),
+        _ => (),
     };
     //create vec with value of each card (value depending if its trump)
     for card in cards_in_play.iter() {
         match game_mode {
+            Pass => panic!("Pass variant is not supposed to be possbible here!"),
             OneTrump(_) => {
                 if card.suit == trump_suit {
                     card_num.push(TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
@@ -282,6 +381,7 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
     }
     let mut temp_card_strongest_value = card_num[0];
     let mut trump_played = false;
+    let init_suit = cards_in_play[0].suit;
     //compare each card, in one trump case compare only when needed (otherwise incorrect result)
     for (index, card) in cards_in_play.iter().enumerate() {
         if one_trump {
@@ -291,97 +391,75 @@ fn cards_compare(cards_in_play: Vec<Card>, game_mode: &GameMode) -> Card {
                 temp_card_strongest_value = card_num[index];
                 card_strongest_index = index;
                 continue;
+                init_suit = trump_suit
             }
             if trump_played == true && card.suit != trump_suit {
                 //case 3 - Trump played, current card non-trump, DON'T compare
                 continue;
             }
         }
-        if temp_card_strongest_value < card_num[index] {
-            temp_card_strongest_value = card_num[index];
-            card_strongest_index = index;
+
+        if card.suit == init_suit {
+            if temp_card_strongest_value < card_num[index] {
+                temp_card_strongest_value = card_num[index];
+                card_strongest_index = index;
+            }
         }
     }
-    cards_in_play[card_strongest_index]
+    println!(
+        "\tThe strongest card is the {:?} of {:?}",
+        cards_in_play[card_strongest_index].value, cards_in_play[card_strongest_index].suit
+    );
+    card_strongest_index
 }
 
-impl Hands {
-    fn new() -> Self {
-        Self {
-            p1: vec![],
-            p2: vec![],
-            p3: vec![],
-            p4: vec![],
-        }
-    }
-    fn add_cards(mut self, deck: &mut Vec<Card>, num_add: usize) -> Self {
-        //adds certain amount of cards to each hand and returns hands
-        self.p1.extend(deck.iter().take(num_add));
-        deck.drain(..num_add);
-        self.p2.extend(deck.iter().take(num_add));
-        deck.drain(..num_add);
-        self.p3.extend(deck.iter().take(num_add));
-        deck.drain(..num_add);
-        self.p4.extend(deck.iter().take(num_add));
-        deck.drain(..num_add);
+fn new_hands() -> [Vec<Card>; 4] {
+    [vec![], vec![], vec![], vec![]]
+}
 
-        self.p1 = sort_hand(self.p1, REGULAR_ORDER);
-        self.p2 = sort_hand(self.p2, REGULAR_ORDER);
-        self.p3 = sort_hand(self.p3, REGULAR_ORDER);
-        self.p4 = sort_hand(self.p4, REGULAR_ORDER);
+fn add_cards(mut hands: [Vec<Card>; 4], deck: &mut Vec<Card>, num_add: usize) -> [Vec<Card>; 4] {
+    //adds certain amount of cards to each hand and returns hands
 
-        self
+    for index in 0..hands.len() {
+        hands[index].extend(deck.iter().take(num_add));
+        deck.drain(..num_add);
+        hands[index] = sort_hand(&mut hands[index], REGULAR_ORDER);
     }
-    fn iter(&self) -> Vec<&Vec<Card>> {
-        vec![&self.p1, &self.p2, &self.p3, &self.p4]
-    }
-    fn iter_mut(&mut self) -> Vec<&mut Vec<Card>> {
-        vec![&mut self.p1, &mut self.p2, &mut self.p3, &mut self.p4]
-    }
-    fn print_all_hands(&self) {
-        for (index, hand) in self.iter().iter().enumerate() {
-            println!("Hand #{}", index + 1);
-            for card in hand.iter() {
-                println!("\t{:?}\t{:?}", card.value, card.suit);
-            }
-            check_carre(hand);
-            check_cards_sequence(hand.to_vec());
-            println!();
-        }
-    }
-    fn print_hand(&self, index: usize) {
+    hands
+}
+
+fn print_all_hands(hands: &[Vec<Card>; 4]) {
+    for (index, hand) in hands.iter().enumerate() {
         println!("Hand #{}", index + 1);
-        let hand = self.iter()[index];
         for card in hand.iter() {
             println!("\t{:?}\t{:?}", card.value, card.suit);
         }
+        check_cards_sequence(&mut hand.clone());
+        check_carre(hand);
         println!();
     }
+}
 
-    fn new_game() -> (Self, Vec<Card>) {
-        //creates new empty hands
-        //creates new shuffled deck
-        //calls add_cards with FIRST_CARD_DEALING_NUM
-        //prints hands and returns
-        let mut hands = Hands::new();
-        let mut deck = generate_full_deck();
-        hands = Hands::add_cards(hands, &mut deck, FIRST_CARD_DEALING_NUM);
-        println!("\nStarting a new game!");
-        println!("Added 5 cards to each hand:\n");
-        Hands::print_all_hands(&hands);
-        (hands, deck)
-    }
-    fn continue_game(mut self, deck: &mut Vec<Card>) -> Self {
-        //adds 3 cards to each hand, prints and returns
-        self = Hands::add_cards(self, deck, SECOND_CARD_DEALING_NUM);
-        for (index, hand) in self.iter().iter().enumerate() {
-            for card in hand.iter() {}
-        }
-        println!("\nContinuing game!");
-        println!("Added 3 more cards to each hand. Good luck!\n");
-        Hands::print_all_hands(&self);
-        self
-    }
+fn new_game() -> ([Vec<Card>; 4], Vec<Card>) {
+    //creates new empty hands
+    //creates new shuffled deck
+    //calls add_cards with FIRST_CARD_DEALING_NUM
+    //prints hands and returns
+    let mut hands = new_hands();
+    let mut deck = generate_full_deck();
+    hands = add_cards(hands, &mut deck, FIRST_CARD_DEALING_NUM);
+    println!("\nStarting a new game!");
+    println!("Added 5 cards to each hand:\n");
+    print_all_hands(&hands);
+    (hands, deck)
+}
+fn continue_game(mut hands: [Vec<Card>; 4], deck: &mut Vec<Card>) -> [Vec<Card>; 4] {
+    //adds 3 cards to each hand, prints and returns
+    hands = add_cards(hands, deck, SECOND_CARD_DEALING_NUM);
+    println!("\nContinuing game!");
+    println!("Added 3 more cards to each hand. Good luck!\n");
+    print_all_hands(&hands);
+    hands
 }
 
 fn generate_full_deck() -> Vec<Card> {
@@ -399,29 +477,32 @@ fn generate_full_deck() -> Vec<Card> {
 
     deck
 }
-#[derive(Debug, PartialEq)]
+
+#[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
+enum Bidding {
+    Pass,
+    GameMode(GameMode),
+}
+
+#[derive(Debug, PartialEq, EnumIter, Clone, Copy, Default)]
 enum GameMode {
+    Pass,
     OneTrump(CardSuits),
+    #[default]
     NoTrumps,
     AllTrumps,
 }
 
-#[derive(Debug)]
-struct Hands {
-    p1: Vec<Card>,
-    p2: Vec<Card>,
-    p3: Vec<Card>,
-    p4: Vec<Card>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Card {
-    pub value: CardValue,
-    pub suit: CardSuits,
+    value: CardValue,
+    suit: CardSuits,
 }
 
-#[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
+#[derive(Debug, PartialEq, EnumIter, Copy, Clone, Default)]
+
 pub enum CardSuits {
+    #[default]
     Clubs,
     Diamonds,
     Hearts,
