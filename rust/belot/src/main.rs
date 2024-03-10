@@ -99,16 +99,15 @@ fn run() {
         hands = continue_game(hands, &mut deck);
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
+        let game_mode: GameMode = NoTrumps;
         for card_index in 0..hands[0].len() {
             for hand_index in 0..4 {
                 print_cards_in_play(&cards_in_play, 0);
                 println!("player #{}", hand_index + 1);
-                //PROBLEM: pushes the next card to the appropriate one
-                //(according to print_cards_in_play())
                 cards_in_play.push(ask_play_card(&mut hands[hand_index]));
             }
             print_cards_in_play(&cards_in_play, 0);
-            let win_hand_index = cards_compare(&cards_in_play, &AllTrumps);
+            let win_hand_index = cards_compare(&cards_in_play, &game_mode);
             //assume indexes 0 and 2 are of one team, as well as 1 and 3
             if win_hand_index % 2 == 0 {
                 point_decks[0].append(&mut cards_in_play);
@@ -116,8 +115,79 @@ fn run() {
                 point_decks[1].append(&mut cards_in_play);
             }
         }
+        let points_game: [usize; 2] = point_count(point_decks, &game_mode);
         break;
     }
+}
+
+fn point_count(point_decks: [Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] {
+    //takes 2 decks and transforms cards into points for each team
+    //
+    //TO BE DONE:
+    //  1:  take extra parameter of type [usize;2] which is total points
+    //      from announcments for each team and adds it to the points_total at the end
+    //  2:  Add or remove points based on capot, vutrene and others
+    //  both could additions could be in their own function
+    let mut points_total: [usize; 2] = [0, 0];
+    for index in 0..2 {
+        for card in point_decks[index].iter() {
+            let points_order = match game_mode {
+                NoTrumps => PointsOrder::NoTrumps,
+                AllTrumps => PointsOrder::AllTrumps,
+                OneTrump(trump_suit) => {
+                    if card.suit == *trump_suit {
+                        PointsOrder::AllTrumps
+                    } else {
+                        PointsOrder::NoTrumps
+                    }
+                }
+                Pass => panic!("Pass is not supposed to be possible here (point_count())"),
+            };
+
+            //This is 1 of 2 ways to do it:
+            //2nd way is to make arrays of each team's points, then add them
+            //(this is in the case that you need arrays of points for some reason)
+            points_total[index] += match points_order {
+                PointsOrder::NoTrumps => match card.value {
+                    Seven => 0,
+                    Eight => 0,
+                    Nine => 0,
+                    Jack => 2,
+                    Queen => 3,
+                    King => 4,
+                    Ten => 10,
+                    Ace => 11,
+                },
+                PointsOrder::AllTrumps => match card.value {
+                    Seven => 0,
+                    Eight => 0,
+                    Queen => 3,
+                    King => 4,
+                    Ten => 10,
+                    Ace => 11,
+                    Nine => 14,
+                    Jack => 20,
+                },
+            }
+        }
+    }
+
+    //in case of No trumps: multiply points by 2
+    match game_mode {
+        NoTrumps => {
+            points_total[0] *= 2;
+            points_total[1] *= 2;
+        }
+        _ => (),
+    }
+    println!("\n\t\tTeam 1's points: {}", points_total[0]);
+    println!("\t\tTeam 2's points: {}\n", points_total[1]);
+    points_total
+}
+
+enum PointsOrder {
+    NoTrumps,
+    AllTrumps,
 }
 //bidding - init player, calls,
 //next player - repeat
@@ -221,6 +291,7 @@ fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
             cards_in_play[i].suit
         );
     }
+    println!();
 }
 
 fn take_card(hand: &mut Vec<Card>, index: usize) -> Card {
