@@ -186,8 +186,8 @@ fn check_cards_sequence(hand: &Vec<Card>, hand_index: usize, points_count: &mut 
                 points_count[hand_index % 2] += 100;
             }
             8 => {
-                println!("\tWOW! This hand has a quinte\n");
-                points_count[hand_index % 2] += 100;
+                println!("\tWOW! 8 in a row! This hand has a quinte AND a tierce!!!\n");
+                points_count[hand_index % 2] += 120;
             }
             _ => (),
         }
