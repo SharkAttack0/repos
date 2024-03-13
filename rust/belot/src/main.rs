@@ -25,8 +25,8 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can compare cards based on the game mode
 //can check for cards in a row
 //can check for carre (4 cards of equal value)
-//can take user input
 //can evaluate point system from cards
+//can take user input
 //can print the table (cards in play)
 //can add points from announcments
 //
@@ -98,7 +98,19 @@ fn main() {
 //9 - repeat with next player starting, until team has >=151 points
 //10 - repeat
 fn run() {
+    let mut points_total: [usize; 2] = [0, 0];
     loop {
+        for index in 0..2 {
+            //usually there are 4 cases:
+            //1 - team 1 has >=151, team 2 doesn't
+            //2 - team 2 has >=151, team 1 doesn't
+            //3 - both teams have >=151, one with more points - they win
+            //4 - both teams have >=151, both equal points - play again
+            if points_total[index] >= 151 {
+                println!("Team #{} is the winner!", index + 1);
+                break;
+            }
+        }
         let (mut hands, mut deck) = new_game();
         let game_mode: GameMode = AllTrumps;
         let mut points_from_announs: [usize; 2] = [0, 0];
@@ -136,9 +148,14 @@ fn run() {
                 index + 1,
                 points_game[index]
             );
+            //points_total removes first digit of score (no rounding)
+            points_total[index] += (points_game[index] / 10);
+            println!(
+                "Team #{}'s total points: {}",
+                index + 1,
+                points_total[index]
+            );
         }
-
-        break;
     }
 }
 
@@ -245,11 +262,11 @@ fn point_count(point_decks: [Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] 
     //
     //TO BE DONE:
     //  1:  take extra parameter of type [usize;2] which is total points
-    //      from announcments for each team and adds it to the points_total at the end
+    //      from announcments for each team and adds it to the points_from_decks at the end
     //  2:  Add or remove points based on capot, vutrene and others
     //      both additions could be in their own function
     //
-    let mut points_total: [usize; 2] = [0, 0];
+    let mut points_from_decks: [usize; 2] = [0, 0];
     for index in 0..2 {
         for card in point_decks[index].iter() {
             let points_order = match game_mode {
@@ -268,7 +285,7 @@ fn point_count(point_decks: [Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] 
             //This is 1 of 2 ways to do it:
             //2nd way is to make arrays of each team's points, then add them
             //(this is in the case that you need arrays of points for some reason)
-            points_total[index] += match points_order {
+            points_from_decks[index] += match points_order {
                 PointsOrder::NoTrumps => match card.value {
                     Seven => 0,
                     Eight => 0,
@@ -296,12 +313,12 @@ fn point_count(point_decks: [Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] 
     //in case of No trumps: multiply points by 2
     match game_mode {
         NoTrumps => {
-            points_total[0] *= 2;
-            points_total[1] *= 2;
+            points_from_decks[0] *= 2;
+            points_from_decks[1] *= 2;
         }
         _ => (),
     }
-    points_total
+    points_from_decks
 }
 
 fn points_from_sequence(row_value: usize) -> usize {
@@ -394,6 +411,19 @@ fn user_input_to_int(max_allowed_int: usize) -> usize {
 }
 
 fn ask_play_card(hand: &mut Vec<Card>) -> Card {
+    //always true: first player: no restricions
+    //needed checks for validating proper card:
+    //NoTrumps:
+    //play init_suit
+    //play any
+    //AllTrumps:
+    //if >init_suit - enemy: play init_suit
+    //if <init_suit - play <init_suit
+    //play any
+    //OneTrump:
+    //play init_suit(init_suit could be trump)
+    //play >trump if trump is
+    //play any
     let mut ans_int;
     println!("Choose a card:");
     print_hand(hand, true);
