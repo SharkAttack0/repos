@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use core::panic;
 use std::default;
 use std::fmt::write;
 use std::io;
@@ -100,28 +101,26 @@ fn main() {
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     loop {
-        for index in 0..2 {
-            //usually there are 4 cases:
-            //1 - team 1 has >=151, team 2 doesn't
-            //2 - team 2 has >=151, team 1 doesn't
-            //3 - both teams have >=151, one with more points - they win
-            //4 - both teams have >=151, both equal points - play again
-            if points_total[index] >= 151 {
-                println!("Team #{} is the winner!", index + 1);
-                break;
-            }
-        }
         let (mut hands, mut deck) = new_game();
         let game_mode: GameMode = AllTrumps;
         let mut points_from_announs: [usize; 2] = [0, 0];
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
+
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
+
         for card_index in 0..hands[0].len() {
-            for hand_index in 0..4 {
+            //skip first card to skip checks for it
+            let init_card = ask_play_card(&mut hands[0]);
+            cards_in_play.push(init_card);
+            for hand_index in 1..4 {
+                cards_in_play.push(card_validation(
+                    &mut hands[hand_index],
+                    &game_mode,
+                    init_card,
+                ));
                 print_cards_in_play(&cards_in_play, 0);
                 println!("player #{}", hand_index + 1);
-                cards_in_play.push(ask_play_card(&mut hands[hand_index]));
             }
             print_cards_in_play(&cards_in_play, 0);
             //win_hand_index is the same index as first player of next turn
@@ -155,6 +154,17 @@ fn run() {
                 index + 1,
                 points_total[index]
             );
+        }
+        for index in 0..2 {
+            //usually there are 4 cases:
+            //1 - team 1 has >=151, team 2 doesn't
+            //2 - team 2 has >=151, team 1 doesn't
+            //3 - both teams have >=151, one with more points - they win
+            //4 - both teams have >=151, both equal points - play again
+            if points_total[index] >= 151 {
+                println!("Team #{} is the winner!", index + 1);
+                break;
+            }
         }
     }
 }
@@ -422,13 +432,110 @@ fn ask_play_card(hand: &mut Vec<Card>) -> Card {
     //play any
     //OneTrump:
     //play init_suit(init_suit could be trump)
-    //play >trump if trump is
+    //play >trump if highest trump is from opponent
     //play any
     let mut ans_int;
     println!("Choose a card:");
     print_hand(hand, true);
     ans_int = user_input_to_int(hand.len());
-    take_card(hand, ans_int)
+    hand[ans_int]
+}
+
+fn card_validation(hand: &mut Vec<Card>, game_mode: &GameMode, init_card: Card) -> Card {
+    //checks if card is valid for playing
+    //(needs to NOT be first played card because it is used for initial checks)
+    //init_suit must be the current strongest card
+    let mut has_init_suit = false;
+    let mut has_higher_value = false;
+    for card in hand.iter() {
+        if card.suit == init_card.suit {
+            has_init_suit = true;
+        }
+        if card.value == init_card.value {
+            has_higher_value = true;
+        }
+    }
+    let mut card_to_play: Card;
+    loop {
+        card_to_play = ask_play_card(hand);
+
+        //init checks, valid for every game mode
+        if has_init_suit {
+            if card_to_play.suit != init_card.suit {
+                println!("Card's suit doesn't match the required one");
+                continue;
+            }
+        } else {
+            //extra check for onetrump case
+            match game_mode {
+                OneTrump(trump_suit) => {
+                    if init_card.suit != *trump_suit {
+                        let mut has_trump = false;
+                        for card in hand {
+                            if card.suit == *trump_suit {
+                                has_trump = true;
+                            }
+                        }
+                        if has_trump {
+                            println!("You don't have the required suit, but you have a trump,");
+                        }
+                    }
+                }
+                _ => (),
+            }
+            println!("You don't have the required suit, play any card");
+            break;
+        }
+
+        //init.suit == true
+        //card_to_play.suit == init_card.suit
+
+        //no init.suit - any (needs extra check for trump)
+        //init.suit - has it:
+        //init.suit == trump: check for > value
+        //
+        //OneTrump - no init.suit BUT have trump - play trump
+
+        let card_to_play_val = TRUMP_ORDER
+            .iter()
+            .position(|&r| r == card_to_play.value)
+            .unwrap();
+
+        let init_card_val = TRUMP_ORDER
+            .iter()
+            .position(|&r| r == init_card.value)
+            .unwrap();
+
+        match game_mode {
+            NoTrumps => (),
+            AllTrumps => {
+                if has_higher_value {
+                    if card_to_play_val > init_card_val {
+                        break;
+                    }
+                    println!("You have a higher value trump, but this card isn't!");
+                    continue;
+                }
+                println!("You don't have a higher value trump, just play a trump");
+                break;
+            }
+            OneTrump(trump_suit) => {
+                if init_card.suit == *trump_suit {
+                    if has_higher_value {
+                        if card_to_play_val > init_card_val {
+                            break;
+                        }
+                        println!("You have a higher value trump, but this card isn't!");
+                        continue;
+                    }
+                    println!("You don't have a higher value trump, just play a trump");
+                    break;
+                }
+            }
+            Pass => panic!("Pass shouldn't be possible at ask_play_card()"),
+        }
+    }
+    card_to_play
 }
 
 fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
