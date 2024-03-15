@@ -102,7 +102,7 @@ fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     loop {
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = OneTrump(Clubs);
+        let game_mode: GameMode = OneTrump(Hearts);
         let mut points_from_announs: [usize; 2] = [0, 0];
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
@@ -111,7 +111,10 @@ fn run() {
 
         for card_index in 0..hands[0].len() {
             //init_card value here should never be of actual use
-            let mut init_card = Card{value: Seven, suit: Clubs};
+            let mut init_card = Card {
+                value: Seven,
+                suit: Clubs,
+            };
             for hand_index in 0..4 {
                 print_cards_in_play(&cards_in_play, 0);
                 println!("player #{}", hand_index + 1);
@@ -120,21 +123,20 @@ fn run() {
                     init_card = ask_play_card(&mut hands[0]);
                     cards_in_play.push(init_card);
                 } else {
-                init_card = cards_in_play[cards_compare(&cards_in_play, &game_mode)];
-                //new problem - doesnt remove played card from hand
-                cards_in_play.push(card_validation(
-                    &mut hands[hand_index],
-                    &game_mode,
-                    init_card,
-                ));
-
-            }
-                
+                    init_card = cards_in_play[cards_compare(&cards_in_play, &game_mode)];
+                    //new problem - doesnt remove played card from hand
+                    cards_in_play.push(card_validation(
+                        &mut hands[hand_index],
+                        &game_mode,
+                        init_card,
+                        &cards_in_play,
+                    ));
+                }
             }
             print_cards_in_play(&cards_in_play, 0);
             //win_hand_index is the same index as first player of next turn
             let win_hand_index = cards_compare(&cards_in_play, &game_mode);
-            
+
             //assume indexes 0 and 2 are of one team, as well as 1 and 3
             if win_hand_index % 2 == 0 {
                 point_decks[0].append(&mut cards_in_play);
@@ -389,16 +391,21 @@ fn ask_play_card(hand: &mut Vec<Card>) -> Card {
     hand[ans_int]
 }
 
-fn card_validation(hand: &mut Vec<Card>, game_mode: &GameMode, init_card: Card) -> Card {
+fn card_validation(
+    hand: &mut Vec<Card>,
+    game_mode: &GameMode,
+    init_card: Card,
+    cards_in_play: &Vec<Card>,
+) -> Card {
     //checks if card is valid for playing
     //(needs to NOT be first played card because it is used for initial checks)
     //init_suit must be the current strongest card
     let mut has_init_suit = false;
     let mut has_higher_value = false;
     let init_card_val = TRUMP_ORDER
-            .iter()
-            .position(|&r| r == init_card.value)
-            .unwrap();
+        .iter()
+        .position(|&r| r == init_card.value)
+        .unwrap();
     let card_val = cards_actual_value(hand, TRUMP_ORDER);
     for (index, card) in hand.iter().enumerate() {
         if card.suit == init_card.suit {
@@ -407,15 +414,19 @@ fn card_validation(hand: &mut Vec<Card>, game_mode: &GameMode, init_card: Card) 
                 has_higher_value = true;
             }
         }
-        
     }
     let mut card_to_play: Card;
     loop {
+        print_cards_in_play(cards_in_play, 0);
         card_to_play = ask_play_card(hand);
+        let card_to_play_val = TRUMP_ORDER
+            .iter()
+            .position(|&r| r == card_to_play.value)
+            .unwrap();
         //init checks, valid for every game mode
         if has_init_suit {
             if card_to_play.suit != init_card.suit {
-                println!("Card's suit doesn't match the required one");
+                println!("Card's suit doesn't match the required one!");
                 continue;
             }
         } else {
@@ -424,15 +435,22 @@ fn card_validation(hand: &mut Vec<Card>, game_mode: &GameMode, init_card: Card) 
                 OneTrump(trump_suit) => {
                     if init_card.suit != *trump_suit {
                         let mut has_trump = false;
-                        for card in hand {
+                        for card in hand.iter() {
                             if card.suit == *trump_suit {
                                 has_trump = true;
                             }
                         }
                         if has_trump {
-                            //fix this, rest should be working properly
-                            println!("You don't have the required suit, but you have a trump,");
+                            //no init_suit, but has trump (this is case 2 from cards_compare())
+                            if card_to_play.suit == *trump_suit {
+                                println!("You don't have the required suit, but you have a trump");
+                                break;
+                            }
+                            println!("You have a trump, but you aren't playing it!");
+                            continue;
                         }
+                        println!("You dont have required suit or a trump, play any");
+                        break;
                     }
                 }
                 _ => (),
@@ -440,13 +458,8 @@ fn card_validation(hand: &mut Vec<Card>, game_mode: &GameMode, init_card: Card) 
             println!("You don't have the required suit, play any card");
             break;
         }
-        let card_to_play_val = TRUMP_ORDER
-            .iter()
-            .position(|&r| r == card_to_play.value)
-            .unwrap();
 
-        
-       //init.suit == true
+        //init.suit == true
         //card_to_play.suit == init_card.suit
 
         //no init.suit - any (needs extra check for trump)
