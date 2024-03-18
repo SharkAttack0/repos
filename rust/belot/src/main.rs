@@ -30,60 +30,31 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can take user input
 //can print the table (cards in play)
 //can add points from announcments
-//
-//TO BE DONE:
-//player turns:
-//bidding
-//playing a card on table (only when allowed)
-//restarting the game when everyone has passed
-//belot check
-//and more...
-//
-//MAJOR problems;
-//Bidding
-//init player after every turn
+//can play a card on table (only when allowed)
+//can add 10 points to team getting last trick
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn in_a_row() {
-        let result = vec![
-            Card {
-                value: Seven,
-                suit: Clubs,
-            },
-            Card {
-                value: Eight,
-                suit: Clubs,
-            },
-            Card {
-                value: Nine,
-                suit: Clubs,
-            },
-            Card {
-                value: King,
-                suit: Diamonds,
-            },
-            Card {
-                value: Ace,
-                suit: Spades,
-            },
-            Card {
-                value: King,
-                suit: Spades,
-            },
-            Card {
-                value: Queen,
-                suit: Spades,
-            },
-            Card {
-                value: Jack,
-                suit: Spades,
-            },
-        ];
-    }
-}
+//TO BE DONE:
+//change init player:
+//bidding
+//belot check
+//compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
+//rounding points at end of game
+//
+//at first look, bots seem to be quite easy to add (and to make them good, too)
+//when game is compeletely finished, add bots
+//idea for bots: put card_validation() in a for each card in hand cycle
+//get vec of legal cards to be played and create condition to decide
+//which one to play (or simply randomize it)
+//if bot is first, get dominant cards and play them first
+//add awareness of teammate's changed bid? 
+//(example: teammate called clubs and game mode is alltrumps, when no dominant card
+//is available, play clubs)
+//quite easy to have a couple of difficulties, too (i think)
+//possible big additions:
+//gui
+//multiplayer
+//bots (whether to play with them solo or replace a missing player)
+//shiii this could be an actual complete game
 fn main() {
     run();
 }
@@ -100,10 +71,13 @@ fn main() {
 //10 - repeat
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
+    let mut points_game: [usize; 2];
     loop {
+        points_game = [0,0];
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = OneTrump(Hearts);
+        let game_mode: GameMode = AllTrumps;
         let mut points_from_announs: [usize; 2] = [0, 0];
+        let mut win_hand_index: usize = 0;
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
@@ -120,7 +94,9 @@ fn run() {
                 println!("player #{}", hand_index + 1);
                 //skip checks for first card
                 if hand_index == 0 {
-                    init_card = ask_play_card(&mut hands[0]);
+                    let init_card_index = ask_play_card(&mut hands[0]);
+                    init_card = hands[0][init_card_index];
+                    hands[0].remove(init_card_index);
                     cards_in_play.push(init_card);
                 } else {
                     init_card = cards_in_play[cards_compare(&cards_in_play, &game_mode)];
@@ -135,30 +111,45 @@ fn run() {
             }
             print_cards_in_play(&cards_in_play, 0);
             //win_hand_index is the same index as first player of next turn
-            let win_hand_index = cards_compare(&cards_in_play, &game_mode);
+            win_hand_index = cards_compare(&cards_in_play, &game_mode);
+            println!("Strongest card is the {:?} of {:?}", cards_in_play[win_hand_index].value, cards_in_play[win_hand_index].suit);
 
             //assume indexes 0 and 2 are of one team, as well as 1 and 3
-            if win_hand_index % 2 == 0 {
-                point_decks[0].append(&mut cards_in_play);
-            } else {
-                point_decks[1].append(&mut cards_in_play);
-            }
+            point_decks[win_hand_index % 2].append(&mut cards_in_play);
         }
 
-        let mut points_game: [usize; 2] = point_count(point_decks, &game_mode);
+        //round's over
+        println!("\nThe round is over!");
+        println!("Added 10 points to team #{} for getting last trick\n", (win_hand_index % 2) + 1);
+        
+        points_game = point_count(point_decks, &game_mode);
 
+        //add last 10 to team that got last trick
+        match game_mode {
+            NoTrumps => points_game[win_hand_index % 2] += 20,
+            _ => {
+                points_game[win_hand_index % 2] += 10;
+                for index in 0..2 {
+                    println!(
+                        "Team #{}'s points from announcments: {}",
+                        index + 1,
+                        points_from_announs[index]
+                    );
+                    //maybe make it so at NoTrumps it doesn't check for announs
+                    points_game[index] += points_from_announs[index];
+                }
+            },
+        }
+        println!();
         for index in 0..2 {
-            println!(
-                "Team #{}'s points from announcments: {}",
-                index + 1,
-                points_from_announs[index]
-            );
-            points_game[index] += points_from_announs[index];
             println!(
                 "Team #{}'s points from game: {}",
                 index + 1,
                 points_game[index]
             );
+        }
+        println!();
+        for index in 0..2 {
             //points_total removes first digit of score (no rounding)
             points_total[index] += (points_game[index] / 10);
             println!(
@@ -167,17 +158,28 @@ fn run() {
                 points_total[index]
             );
         }
+
         for index in 0..2 {
-            //usually there are 4 cases:
-            //1 - team 1 has >=151, team 2 doesn't
-            //2 - team 2 has >=151, team 1 doesn't
-            //3 - both teams have >=151, one with more points - they win
-            //4 - both teams have >=151, both equal points - play again
-            if points_total[index] >= 151 {
+            if points_total[index] >= 151  {
+                if points_total[(index +1 ) % 2] < 151 {
+                //one team is >= 151, other isn't - winner
                 println!("Team #{} is the winner!", index + 1);
                 break;
+                } else {
+                    //both teams >=151
+                    if points_total[index] > points_total[(index + 1) % 2] {
+                        //one team has more points
+                        println!("Team #{} is the winner!", index + 1);
+                        break;
+                    } else {
+                        //both team have equal points
+                        println!("Both teams have 151 but are equal! Starting another game...");
+                    }
+                }
             }
         }
+        println!("Enter any key to continue");
+        user_input();
     }
 }
 
@@ -383,12 +385,12 @@ fn user_input_to_int(max_allowed_int: usize) -> usize {
     input_int - 1
 }
 
-fn ask_play_card(hand: &mut Vec<Card>) -> Card {
+fn ask_play_card(hand: &mut Vec<Card>) -> usize {
     let mut ans_int;
     println!("Choose a card:");
     print_hand(hand, true);
     ans_int = user_input_to_int(hand.len());
-    hand[ans_int]
+    ans_int
 }
 
 fn card_validation(
@@ -416,9 +418,12 @@ fn card_validation(
         }
     }
     let mut card_to_play: Card;
+    let mut card_to_play_index: usize;
+
     loop {
         print_cards_in_play(cards_in_play, 0);
-        card_to_play = ask_play_card(hand);
+        card_to_play_index = ask_play_card(hand);
+        card_to_play = hand[card_to_play_index];
         let card_to_play_val = TRUMP_ORDER
             .iter()
             .position(|&r| r == card_to_play.value)
@@ -470,6 +475,11 @@ fn card_validation(
         match game_mode {
             NoTrumps => (),
             AllTrumps => {
+                if (cards_in_play.len() == 2 && init_card == cards_in_play[0] )
+                        || (cards_in_play.len() == 3 && init_card == cards_in_play[1] ) {
+                            println!("Your teammate has the highest trump, just play a trump");
+                            break;
+                        }
                 if has_higher_value {
                     if card_to_play_val > init_card_val {
                         break;
@@ -481,14 +491,24 @@ fn card_validation(
                 break;
             }
             OneTrump(trump_suit) => {
+                //trump case
                 if init_card.suit == *trump_suit {
-                    if has_higher_value {
-                        if card_to_play_val > init_card_val {
+                    //in case of 2 cards in play - 1st card is teammate, skip this check
+                    //in case of 3 cards in play - 2nd card is teammate, skip this check
+                    if (cards_in_play.len() == 2 && init_card == cards_in_play[0] )
+                        || (cards_in_play.len() == 3 && init_card == cards_in_play[1] ) {
+                            println!("Your teammate has the highest trump, just play a trump");
                             break;
                         }
-                        println!("You have a higher value trump, but this card isn't!");
-                        continue;
+                    if has_higher_value {
+                        
+                            if card_to_play_val > init_card_val {
+                                break;
+                            }
+                            println!("You have a higher value trump, but this card isn't!");
+                            continue;
                     }
+                   
                     println!("You don't have a higher value trump, just play a trump");
                     break;
                 }
@@ -497,6 +517,7 @@ fn card_validation(
         }
         break;
     }
+    hand.remove(card_to_play_index);
     card_to_play
 }
 
@@ -650,10 +671,6 @@ fn cards_compare(cards_in_play: &Vec<Card>, game_mode: &GameMode) -> usize {
             }
         }
     }
-    println!(
-        "\tThe strongest card is the {:?} of {:?}",
-        cards_in_play[card_strongest_index].value, cards_in_play[card_strongest_index].suit
-    );
     card_strongest_index
 }
 
@@ -684,6 +701,7 @@ fn new_game() -> ([Vec<Card>; 4], Vec<Card>) {
     println!("Added 5 cards to each hand:\n");
     for index in 0..4 {
         hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER);
+        println!("player #{}:", index + 1);
         print_hand(&hands[index], false);
     }
     (hands, deck)
