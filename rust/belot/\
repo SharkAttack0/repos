@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use std::convert;
 use std::default;
 use std::fmt::write;
 use std::io;
@@ -32,13 +33,13 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can add points from announcments
 //can play a card on table (only when allowed)
 //can add 10 points to team getting last trick
-//can round points at end of game
 
 //TO BE DONE:
 //change init player:
 //bidding
 //belot check
 //compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
+//rounding points at end of game
 //
 //at first look, bots seem to be quite easy to add (and to make them good, too)
 //when game is compeletely finished, add bots
@@ -157,17 +158,13 @@ fn run() {
         }
         println!();
         for index in 0..2 {
-            //round points according to game mode
-            let round_limit = match game_mode {
-                OneTrump(_) => 6,
-                AllTrumps => 4,
-                NoTrumps => 5,
+            match game_mode {
+                OneTrump(_) => (),
+                AllTrumps => (),
+                NoTrumps => (),
                 Pass => panic!("Pass shouldn't be possible here!"),
-            };
-            if points_game[index] % 10 >= round_limit {
-                points_game[index] += 10;
             }
-            points_total[index] += (points_game[index] / 10);
+            points_total[index] += (points_game[index] as f64) / 10);
             println!(
                 "Team #{}'s total points: {}",
                 index + 1,
@@ -181,39 +178,21 @@ fn run() {
                     //one team is >= 151, other isn't - winner
                     println!("Team #{} is the winner!", index + 1);
                     break;
+                } else {
+                    //both teams >=151
+                    if points_total[index] > points_total[(index + 1) % 2] {
+                        //one team has more points
+                        println!("Team #{} is the winner!", index + 1);
+                        break;
+                    } else {
+                        //both team have equal points
+                        println!("Both teams have 151 but are equal! Starting another game...");
+                    }
                 }
-                //both teams >=151
-                if points_total[index] > points_total[(index + 1) % 2] {
-                    //one team has more points
-                    println!("Team #{} is the winner!", index + 1);
-                    break;
-                }
-                //both team have equal points
-                println!("Both teams have 151 but are equal! Starting another game...");
             }
         }
         println!("Enter any key to continue");
         user_input();
-    }
-}
-
-fn bidding(init_player: u8) -> GameMode {
-    let mut last_game_mode_index = 7;
-    loop {
-        println!("player #{}" init_player + 1);
-
-        break;
-    }
-
-    match last_game_mode_index {
-        1 => Pass,
-        2 => AllTrumps,
-        3 => NoTrumps,
-        4 => OneTrump(Spades),
-        5 => OneTrump(Hearts),
-        6 => OneTrump(Diamonds),
-        7 => OneTrump(Clubs),
-        _ => panic!("at bidding() user input out of bounds!"),
     }
 }
 
