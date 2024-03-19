@@ -33,10 +33,11 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can play a card on table (only when allowed)
 //can add 10 points to team getting last trick
 //can round points at end of game
+//can get bidding from players (without contra)
 
 //TO BE DONE:
 //change init player:
-//bidding
+//bidding's contra
 //belot check
 //compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
 //
@@ -72,10 +73,18 @@ fn main() {
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     let mut points_game: [usize; 2];
+    let mut init_player = 0;
     loop {
         points_game = [0, 0];
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = AllTrumps;
+        let game_mode: GameMode = bidding(init_player);
+        match game_mode {
+            Pass => {
+                println!("\nAll players passed! Restarting...\n");
+                continue;
+            }
+            _ => println!("\nThe game mode is {:?}\n", game_mode),
+        }
         let mut points_from_announs: [usize; 2] = [0, 0];
         let mut win_hand_index: usize = 0;
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
@@ -197,24 +206,84 @@ fn run() {
     }
 }
 
-fn bidding(init_player: u8) -> GameMode {
-    let mut last_game_mode_index = 7;
+fn bidding(init_player: usize) -> GameMode {
+    let mut last_game_mode_index = 0;
+    let mut current_player = init_player;
+    let mut pass_counter = 0;
+    let mut last_player_who_bid = 4;
     loop {
-        println!("player #{}" init_player + 1);
+        println!("player #{}", current_player + 1);
+        let mut current_bid;
+        if last_game_mode_index == 0 {
+            println!("No one has bid yet");
+            current_bid = ask_bid(current_player, 7);
+        } else {
+            println!(
+                "Current bid: {} from player #{}",
+                match last_game_mode_index {
+                    1 => "AllTrumps",
+                    2 => "NoTrumps",
+                    3 => "OneTrump(Spades)",
+                    4 => "OneTrump(Hearts)",
+                    5 => "OneTrump(Diamonds)",
+                    6 => "OneTrump(Clubs)",
+                    _ => panic!("at bidding() user input out of bounds!"),
+                },
+                last_player_who_bid + 1
+            );
+            current_bid = ask_bid(current_player, last_game_mode_index);
+        };
+        //check if pass
+        if current_bid != 0 {
+            last_game_mode_index = current_bid;
+            last_player_who_bid = current_player;
+            pass_counter = 0;
+        } else {
+            pass_counter += 1;
+            //check 3 passes after bid
+            if last_game_mode_index != 0 && pass_counter == 3 {
+                break;
+            }
+            //check 4 passes for no bid - restart game
+            if last_game_mode_index == 0 && pass_counter == 4 {
+                break;
+            }
+        }
 
-        break;
+        current_player += 1;
+        if current_player > 3 {
+            current_player = 0;
+        }
     }
 
     match last_game_mode_index {
-        1 => Pass,
-        2 => AllTrumps,
-        3 => NoTrumps,
-        4 => OneTrump(Spades),
-        5 => OneTrump(Hearts),
-        6 => OneTrump(Diamonds),
-        7 => OneTrump(Clubs),
+        0 => Pass,
+        1 => AllTrumps,
+        2 => NoTrumps,
+        3 => OneTrump(Spades),
+        4 => OneTrump(Hearts),
+        5 => OneTrump(Diamonds),
+        6 => OneTrump(Clubs),
         _ => panic!("at bidding() user input out of bounds!"),
     }
+}
+
+fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
+    let game_mode_string = [
+        "Pass",
+        "AllTrumps",
+        "NoTrumps",
+        "Spades",
+        "Hearts",
+        "Diamonds",
+        "Clubs",
+    ];
+    println!("\nSelect your bid: ");
+    for index in 0..last_game_mode_index {
+        println!("{}:\t{}", index + 1, game_mode_string[index]);
+    }
+
+    user_input_to_int(last_game_mode_index)
 }
 
 fn check_cards_sequence(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2]) {
