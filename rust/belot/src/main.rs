@@ -74,6 +74,9 @@ fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     let mut points_game: [usize; 2];
     let mut init_player = 0;
+    //init values are not set at end
+    let mut win_hand_index: usize = 0;
+    let mut init_hand_index: usize = 0;
     loop {
         points_game = [0, 0];
         let (mut hands, mut deck) = new_game();
@@ -86,39 +89,41 @@ fn run() {
             _ => println!("\nThe game mode is {:?}\n", game_mode),
         }
         let mut points_from_announs: [usize; 2] = [0, 0];
-        let mut win_hand_index: usize = 0;
+        
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
 
+        //actual playing
         for card_index in 0..hands[0].len() {
             //init_card value here should never be of actual use
             let mut init_card = Card {
                 value: Seven,
                 suit: Clubs,
             };
-            for hand_index in 0..4 {
-                print_cards_in_play(&cards_in_play, 0);
-                println!("player #{}", hand_index + 1);
+            //for for current turn
+            for hand_index in 0..4 { 
+                print_cards_in_play(&cards_in_play, win_hand_index);
+                println!("player #{}", ((hand_index + win_hand_index) % 4) + 1);
                 //skip checks for first card
+                //first player on each turn *almost* fixed
                 if hand_index == 0 {
-                    let init_card_index = ask_play_card(&mut hands[0]);
-                    init_card = hands[0][init_card_index];
-                    hands[0].remove(init_card_index);
+                    let init_card_index = ask_play_card(&mut hands[win_hand_index]);
+                    init_card = hands[win_hand_index][init_card_index];
+                    hands[win_hand_index].remove(init_card_index);
                     cards_in_play.push(init_card);
                 } else {
                     init_card = cards_in_play[cards_compare(&cards_in_play, &game_mode)];
-                    //new problem - doesnt remove played card from hand
                     cards_in_play.push(card_validation(
-                        &mut hands[hand_index],
+                        &mut hands[(hand_index + win_hand_index) % 4],
                         &game_mode,
                         init_card,
                         &cards_in_play,
                     ));
                 }
             }
-            print_cards_in_play(&cards_in_play, 0);
+            print_cards_in_play(&cards_in_play, win_hand_index);
             //win_hand_index is the same index as first player of next turn
             win_hand_index = cards_compare(&cards_in_play, &game_mode);
             println!(
@@ -200,6 +205,11 @@ fn run() {
                 //both team have equal points
                 println!("Both teams have 151 but are equal! Starting another game...");
             }
+        }
+        //move first player with one
+        init_hand_index += 1;
+        if init_hand_index == 4 {
+            init_hand_index = 0;
         }
         println!("Enter any key to continue");
         user_input();
@@ -626,31 +636,16 @@ fn card_validation(
 }
 
 fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
-    //fix this
-    //prints cards in play (cards can be 0-4)
-    //prints position of cards depending on who played first
-    //shifts first card by first_card_index positions
-    //0 3 2 1
-    //1 0 3 2
-    //2 1 0 3
-    //3 2 1 0
-    //0 1 2 3
-    //0 3 2 1
-
+    //prints cards_in_play depending on their count and first playing player
     for index in 0..cards_in_play.len() {
         let i = (index + first_card_index) % cards_in_play.len();
         println!(
-            "\t\t\tp{}:{:?} {:?}",
-            index + 1,
+            "\t\t\tp{}:{:?} {:?}\n",
+            i + 1,
             cards_in_play[i].value,
             cards_in_play[i].suit
         );
     }
-    println!();
-}
-
-fn take_card(hand: &mut Vec<Card>, index: usize) -> Card {
-    hand.remove(index)
 }
 
 fn print_hand(hand: &Vec<Card>, label_card: bool) {
