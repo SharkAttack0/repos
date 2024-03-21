@@ -35,13 +35,15 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can round points at end of game
 //can get bidding from players (without contra)
 //can change first player on each round
-
+//
+//i think it's fully functional! Huivei!
+//
 //TO BE DONE:
-//print_cards_in_play doesn't print cards in correct order
 //bidding's contra
 //belot check
 //compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
 //
+//BEFORE BOTS: REFACTOR THE DAMN THING (AND PUT IT IN SEPERATE FILES)
 //at first look, bots seem to be quite easy to add (and to make them good, too)
 //when game is compeletely finished, add bots
 //idea for bots: put card_validation() in a for each card in hand cycle
@@ -52,6 +54,7 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //(example: teammate called clubs and game mode is alltrumps, when no dominant card
 //is available, play clubs)
 //quite easy to have a couple of difficulties, too (i think)
+//
 //possible big additions:
 //gui
 //multiplayer
@@ -74,19 +77,22 @@ fn main() {
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     let mut points_game: [usize; 2];
-    //init values are not set at end
-    let mut win_hand_index: usize = 0;
     //in order to start at certain player, at function
     //which takes user input for which player to start first
     //(or randomize it)
     let mut init_hand_index: usize = 0;
+    let mut win_hand_index = init_hand_index;
     loop {
+        win_hand_index = init_hand_index;
         points_game = [0, 0];
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = bidding(init_hand_index);
+        let game_mode: GameMode = bidding(win_hand_index);
         match game_mode {
             Pass => {
                 println!("\nAll players passed! Restarting...\n");
+                init_hand_index = (init_hand_index + 1) % 4;
+                println!("Enter any key to continue");
+                user_input();
                 continue;
             }
             _ => println!("\nThe game mode is {:?}\n", game_mode),
@@ -97,7 +103,6 @@ fn run() {
 
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
-        win_hand_index = init_hand_index;
 
         //actual playing
         for card_index in 0..hands[0].len() {
@@ -128,7 +133,7 @@ fn run() {
             }
             print_cards_in_play(&cards_in_play, win_hand_index);
             //win_hand_index is the same index as first player of next turn
-            win_hand_index = cards_compare(&cards_in_play, &game_mode);
+            win_hand_index = (win_hand_index + cards_compare(&cards_in_play, &game_mode)) % 4;
             println!(
                 "Strongest card is the {:?} of {:?}",
                 cards_in_play[win_hand_index].value, cards_in_play[win_hand_index].suit
@@ -638,31 +643,15 @@ fn card_validation(
 
 fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
     //prints cards_in_play depending on their count and first playing player
-    //2
-    //3
-    //0
-    //1
-    // len = 3
-    // first = 3
-    // 0 + 3 = 3
-    // 1 + 3 = 0
-    // 2 + 3 = 1
-    //
-    // len = 4
-    // first = 2
-    // 0 + 2 = 2
-    // 1 + 2 = 3
-    // 2 + 2 = 0
-    // 3 + 2 = 1
     for index in 0..cards_in_play.len() {
-        let i = (index + first_card_index) % cards_in_play.len();
         println!(
-            "\t\t\tp{}:{:?} {:?}\n",
+            "\t\t\tp{}:{:?} {:?}",
             ((first_card_index + index) % 4) + 1,
-            cards_in_play[i].value,
-            cards_in_play[i].suit
+            cards_in_play[index].value,
+            cards_in_play[index].suit
         );
     }
+    println!();
 }
 
 fn print_hand(hand: &Vec<Card>, label_card: bool) {
