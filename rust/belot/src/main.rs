@@ -34,9 +34,10 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can add 10 points to team getting last trick
 //can round points at end of game
 //can get bidding from players (without contra)
+//can change first player on each round
 
 //TO BE DONE:
-//change init player:
+//print_cards_in_play doesn't print cards in correct order
 //bidding's contra
 //belot check
 //compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
@@ -73,14 +74,16 @@ fn main() {
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     let mut points_game: [usize; 2];
-    let mut init_player = 0;
     //init values are not set at end
     let mut win_hand_index: usize = 0;
+    //in order to start at certain player, at function
+    //which takes user input for which player to start first
+    //(or randomize it)
     let mut init_hand_index: usize = 0;
     loop {
         points_game = [0, 0];
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = bidding(init_player);
+        let game_mode: GameMode = bidding(init_hand_index);
         match game_mode {
             Pass => {
                 println!("\nAll players passed! Restarting...\n");
@@ -89,11 +92,12 @@ fn run() {
             _ => println!("\nThe game mode is {:?}\n", game_mode),
         }
         let mut points_from_announs: [usize; 2] = [0, 0];
-        
+
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
+        win_hand_index = init_hand_index;
 
         //actual playing
         for card_index in 0..hands[0].len() {
@@ -103,11 +107,9 @@ fn run() {
                 suit: Clubs,
             };
             //for for current turn
-            for hand_index in 0..4 { 
+            for hand_index in 0..4 {
                 print_cards_in_play(&cards_in_play, win_hand_index);
                 println!("player #{}", ((hand_index + win_hand_index) % 4) + 1);
-                //skip checks for first card
-                //first player on each turn *almost* fixed
                 if hand_index == 0 {
                     let init_card_index = ask_play_card(&mut hands[win_hand_index]);
                     init_card = hands[win_hand_index][init_card_index];
@@ -120,6 +122,7 @@ fn run() {
                         &game_mode,
                         init_card,
                         &cards_in_play,
+                        win_hand_index,
                     ));
                 }
             }
@@ -207,10 +210,7 @@ fn run() {
             }
         }
         //move first player with one
-        init_hand_index += 1;
-        if init_hand_index == 4 {
-            init_hand_index = 0;
-        }
+        init_hand_index = (init_hand_index + 1) % 4;
         println!("Enter any key to continue");
         user_input();
     }
@@ -511,6 +511,7 @@ fn card_validation(
     game_mode: &GameMode,
     init_card: Card,
     cards_in_play: &Vec<Card>,
+    win_hand_index: usize,
 ) -> Card {
     //checks if card is valid for playing
     //(needs to NOT be first played card because it is used for initial checks)
@@ -534,7 +535,7 @@ fn card_validation(
     let mut card_to_play_index: usize;
 
     loop {
-        print_cards_in_play(cards_in_play, 0);
+        print_cards_in_play(cards_in_play, win_hand_index);
         card_to_play_index = ask_play_card(hand);
         card_to_play = hand[card_to_play_index];
         let card_to_play_val = TRUMP_ORDER
@@ -637,11 +638,27 @@ fn card_validation(
 
 fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
     //prints cards_in_play depending on their count and first playing player
+    //2
+    //3
+    //0
+    //1
+    // len = 3
+    // first = 3
+    // 0 + 3 = 3
+    // 1 + 3 = 0
+    // 2 + 3 = 1
+    //
+    // len = 4
+    // first = 2
+    // 0 + 2 = 2
+    // 1 + 2 = 3
+    // 2 + 2 = 0
+    // 3 + 2 = 1
     for index in 0..cards_in_play.len() {
         let i = (index + first_card_index) % cards_in_play.len();
         println!(
             "\t\t\tp{}:{:?} {:?}\n",
-            i + 1,
+            ((first_card_index + index) % 4) + 1,
             cards_in_play[i].value,
             cards_in_play[i].suit
         );
