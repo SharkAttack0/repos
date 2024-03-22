@@ -301,7 +301,7 @@ fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
     user_input_to_int(last_game_mode_index)
 }
 
-fn check_cards_sequence(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2]) {
+fn check_cards_sequence(hand: &Vec<Card>) -> Vec<usize> {
     //sorts hand, checks for cards in a row of same suit
     //DOESN'T WORK IN 1 CASE - IN CASE OF 2 SEQUENCES IN
     //SAME SUIT, WILL REGISTER ONLY 1 (excluding cases of quinte)
@@ -309,6 +309,7 @@ fn check_cards_sequence(hand: &Vec<Card>, hand_index: usize, points_count: &mut 
     let hand = sort_hand(&mut hand.clone(), sort_way);
     let cards_actual_value = cards_actual_value(&hand, sort_way);
     let mut row_value: usize = 1;
+    let mut hand_sequence_values = Vec::new();
     for spec_suit in CardSuits::iter() {
         row_value = 1;
         let mut temp_row_value: usize = 1;
@@ -323,36 +324,11 @@ fn check_cards_sequence(hand: &Vec<Card>, hand_index: usize, points_count: &mut 
             }
         }
 
-        match row_value {
-            3 => {
-                println!("\tThis hand has tierce\n");
-                points_count[hand_index % 2] += 20;
-            }
-            4 => {
-                println!("\tThis hand has a quarte\n");
-                points_count[hand_index % 2] += 50;
-            }
-            5 => {
-                println!("\tWOW! This hand has a quinte\n");
-                points_count[hand_index % 2] += 100;
-            }
-            6 => {
-                println!("\tWOW! This hand has a quinte\n");
-                points_count[hand_index % 2] += 100;
-            }
-            7 => {
-                println!("\tWOW! This hand has a quinte\n");
-                points_count[hand_index % 2] += 100;
-            }
-            8 => {
-                println!("\tWOW! 8 in a row! This hand has a quinte AND a tierce!!!\n");
-                points_count[hand_index % 2] += 120;
-            }
-            _ => (),
-        }
+        hand_sequence_values.push(row_value);
     }
+    hand_sequence_values
 }
-
+// 1 1 4 1  1 3 1 2
 fn check_carre(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2]) {
     let mut value_times = [0, 0, 0, 0, 0, 0];
     for card in hand {
@@ -821,7 +797,9 @@ fn continue_game(
     hands = add_cards(hands, deck, SECOND_CARD_DEALING_NUM);
     println!("\nContinuing game!");
     println!("Added 3 more cards to each hand. Good luck!\n");
+    let mut sequence_values: [Vec<usize>; 2] = [vec![], vec![]];
     for index in 0..4 {
+        //sorting hands' cards
         match game_mode {
             NoTrumps => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             AllTrumps => hands[index] = sort_hand(&mut hands[index], TRUMP_ORDER),
@@ -830,8 +808,68 @@ fn continue_game(
         }
         println!("player #{}:", index + 1);
         print_hand(&hands[index], false);
-        check_carre(&hands[index], index, points_from_announs);
-        check_cards_sequence(&hands[index], index, points_from_announs);
+        //not checking for carre and cards sequences in NoTrumps
+        match game_mode {
+            NoTrumps => (),
+            _ => {
+                check_carre(&hands[index], index, points_from_announs);
+                sequence_values[index % 2].extend(check_cards_sequence(&hands[index]));
+            }
+        }
+    }
+    let mut highest_sequences: [usize; 2] = [0, 0];
+    for index in 0..2 {
+        for val in sequence_values[index].iter() {
+            if highest_sequences[index] < *val {
+                highest_sequences[index] = *val;
+            }
+        }
+    }
+    if highest_sequences[0] != 0 && highest_sequences[1] != 0 {
+        //case where both teams have card sequences
+        if highest_sequences[0] == highest_sequences[1] {
+            println!("The highest sequences are of equal length");
+            //compare sequences' highest card and compare them
+        } else {
+            if highest_sequences[0] > highest_sequences[1] {
+                println!("Team #1's card sequences are longer");
+                println!("Team #2's card sequences don't count");
+            } else {
+                println!("Team #2's card sequences are longer");
+                println!("Team #1's card sequences don't count");
+            }
+        }
+    }
+    for index in 0..2 {
+        for val in sequence_values[index].iter() {
+            match val {
+                3 => {
+                    println!("\tThis hand has tierce\n");
+                    points_from_announs[index % 2] += 20;
+                }
+                4 => {
+                    println!("\tThis hand has a quarte\n");
+                    points_from_announs[index % 2] += 50;
+                }
+                5 => {
+                    println!("\tWOW! This hand has a quinte\n");
+                    points_from_announs[index % 2] += 100;
+                }
+                6 => {
+                    println!("\tWOW! This hand has a quinte\n");
+                    points_from_announs[index % 2] += 100;
+                }
+                7 => {
+                    println!("\tWOW! This hand has a quinte\n");
+                    points_from_announs[index % 2] += 100;
+                }
+                8 => {
+                    println!("\tWOW! 8 in a row! This hand has a quinte AND a tierce!!!\n");
+                    points_from_announs[index % 2] += 120;
+                }
+                _ => (),
+            }
+        }
     }
     hands
 }
