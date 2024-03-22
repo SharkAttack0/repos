@@ -7,6 +7,7 @@ use std::iter;
 use std::panic;
 use std::usize;
 
+use rand::seq::index;
 use rand::seq::SliceRandom;
 use strum::*;
 
@@ -20,6 +21,8 @@ const NO_TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Jack, Queen, King, T
 const TRUMP_ORDER: [CardValue; 8] = [Seven, Eight, Queen, King, Ten, Ace, Nine, Jack];
 const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, King, Ace];
 
+//THIS VERSION FOLLOWS THE belot.bg RULES
+//(PLUS OPINIONS/PREFERENCES FROM FRIENDS)
 //can create and shuffle deck
 //can print all or one hand
 //can add cards to hands
@@ -35,15 +38,20 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //can round points at end of game
 //can get bidding from players (without contra)
 //can change first player on each round
+//can check for belot
 //
 //i think it's fully functional! Huivei!
 //
 //TO BE DONE:
 //bidding's contra
-//belot check
+//vutrene and kapo
 //compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
 //
+//Possible idea: since there are a million versions, make a different
+//variant, each following certain rules
+//
 //BEFORE BOTS: REFACTOR THE DAMN THING (AND PUT IT IN SEPERATE FILES)
+//
 //at first look, bots seem to be quite easy to add (and to make them good, too)
 //when game is compeletely finished, add bots
 //idea for bots: put card_validation() in a for each card in hand cycle
@@ -113,8 +121,9 @@ fn run() {
             };
             //for for current turn
             for hand_index in 0..4 {
+                let actual_player_index = (hand_index + win_hand_index) % 4;
                 print_cards_in_play(&cards_in_play, win_hand_index);
-                println!("player #{}", ((hand_index + win_hand_index) % 4) + 1);
+                println!("player #{}", actual_player_index + 1);
                 if hand_index == 0 {
                     let init_card_index = ask_play_card(&mut hands[win_hand_index]);
                     init_card = hands[win_hand_index][init_card_index];
@@ -123,12 +132,16 @@ fn run() {
                 } else {
                     init_card = cards_in_play[cards_compare(&cards_in_play, &game_mode)];
                     cards_in_play.push(card_validation(
-                        &mut hands[(hand_index + win_hand_index) % 4],
+                        &mut hands[actual_player_index],
                         &game_mode,
                         init_card,
                         &cards_in_play,
                         win_hand_index,
                     ));
+                }
+                //belot check
+                if belot_check(&hands[actual_player_index], &game_mode, cards_in_play[hand_index], init_card) {
+                    points_from_announs[actual_player_index % 2] += 20;
                 }
             }
             print_cards_in_play(&cards_in_play, win_hand_index);
@@ -219,6 +232,40 @@ fn run() {
         println!("Enter any key to continue");
         user_input();
     }
+}
+
+fn belot_check(hand: &Vec<Card>, game_mode: &GameMode, played_card: Card, init_card: Card) -> bool {
+    //returns true if there is a belot (also checks if game mode allows it)
+    //if the played_card is also the first played card, then init_card should be played_card
+    if played_card.value == King || played_card.value == Queen {
+        let second_belot_card = if played_card.value == King {
+            Queen
+        } else {
+            King
+        };
+        match game_mode {
+            NoTrumps => return false,
+            AllTrumps => {
+                if played_card.suit == init_card.suit {  
+                    if hand.contains(&Card{suit: played_card.suit, value: second_belot_card}) {
+                        println!("Belot! Added 20 points");
+                        return true;
+                    }
+                }
+            },
+            OneTrump(trump_suit) => {
+                if played_card.suit == *trump_suit {
+                    if hand.contains(&Card{suit: played_card.suit, value: second_belot_card}) {
+                        println!("Belot! Added 20 points");
+
+                        return true;
+                    }
+                }
+            },
+            Pass => panic!("Pass shouldn't be possible at belot_check()"),
+        }
+    }
+    false
 }
 
 fn bidding(init_player: usize) -> GameMode {
@@ -583,23 +630,9 @@ fn card_validation(
             break;
         }
 
-        //init.suit == true
-        //card_to_play.suit == init_card.suit
-
-        //no init.suit - any (needs extra check for trump)
-        //init.suit - has it:
-        //init.suit == trump: check for > value
-        //
-        //OneTrump - no init.suit BUT have trump - play trump
         match game_mode {
             NoTrumps => (),
             AllTrumps => {
-                if (cards_in_play.len() == 2 && init_card == cards_in_play[0])
-                    || (cards_in_play.len() == 3 && init_card == cards_in_play[1])
-                {
-                    println!("Your teammate has the highest trump, just play a trump");
-                    break;
-                }
                 if has_higher_value {
                     if card_to_play_val > init_card_val {
                         break;
@@ -825,13 +858,20 @@ fn continue_game(
         match game_mode {
             NoTrumps => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             AllTrumps => hands[index] = sort_hand(&mut hands[index], TRUMP_ORDER),
+//can make it to sort trump suit in trump order
             OneTrump(trump_suit) => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             Pass => (),
         }
         println!("player #{}:", index + 1);
         print_hand(&hands[index], false);
-        check_carre(&hands[index], index, points_from_announs);
-        check_cards_sequence(&hands[index], index, points_from_announs);
+        //skip cheks for carre and seq. cards if game mode is NoTrumps
+        match game_mode {
+            NoTrumps => (),
+            _ => {
+                check_carre(&hands[index], index, points_from_announs);
+                check_cards_sequence(&hands[index], index, points_from_announs);
+            }
+        }
     }
     hands
 }
