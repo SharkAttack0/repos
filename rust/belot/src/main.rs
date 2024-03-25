@@ -34,9 +34,6 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //TO BE DONE:
 //bidding's contra
 //finish comparing tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
-//test hanging points
-//test vutrene
-//test kapo
 //
 //Possible idea: since there are a million versions, make a different
 //variant, each following certain rules
@@ -59,20 +56,30 @@ fn main() {
 }
 
 fn run() {
+    //these are variables that must carry throughout games
+    //total points for both teams
     let mut points_total: [usize; 2] = [0, 0];
-    let mut points_game: [usize; 2];
-    //in order to start at certain player, at function
-    //which takes user input for which player to start first
-    //(or randomize it)
+    //first player who bids and playes first card
     let mut init_hand_index: usize = 0;
-    let mut win_hand_index = init_hand_index;
-
     //variable that keeps track of hanging points throughout games
     let mut hanging_points = 0;
+
+    //game loop
     loop {
-        win_hand_index = init_hand_index;
-        points_game = [0, 0];
+        //these are variables that are needed for a game
+        //most important var - keeps track of trick's winner
+        let mut win_hand_index = init_hand_index;
+        //points from current game
+        let mut points_game = [0, 0];
+        //points from announcments (obsolete for NoTrumps)
+        let mut points_from_announs: [usize; 2] = [0, 0];
+        //decks of cards formed by winning tricks
+        let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
+        //create first hands and deck
         let (mut hands, mut deck) = new_game();
+        //current cards on table
+        let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
+        //determine game mode and player who bid (needed for checks at end)
         let (game_mode, player_last_bid_index) = bidding(win_hand_index);
         match game_mode {
             Pass => {
@@ -84,15 +91,13 @@ fn run() {
             }
             _ => println!("\nThe game mode is {:?}\n", game_mode),
         }
-        let mut points_from_announs: [usize; 2] = [0, 0];
 
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
-        let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
-        let mut point_decks: [Vec<Card>; 2] = [vec![], vec![]];
-
         //actual playing
         for card_index in 0..hands[0].len() {
+            //this break is for debug purposes (remove it)
+            break;
             //init_card value here should never be of actual use
             let mut init_card = Card {
                 value: Seven,
@@ -104,6 +109,7 @@ fn run() {
                 print_cards_in_play(&cards_in_play, win_hand_index);
                 println!("player #{}", actual_player_index + 1);
                 if hand_index == 0 {
+                    //skip card validation if first card
                     let init_card_index = ask_play_card(&mut hands[win_hand_index]);
                     init_card = hands[win_hand_index][init_card_index];
                     hands[win_hand_index].remove(init_card_index);
@@ -119,12 +125,19 @@ fn run() {
                     ));
                 }
                 //belot check
-                if belot_check(&hands[actual_player_index], &game_mode, cards_in_play[hand_index], init_card) {
+                if belot_check(
+                    &hands[actual_player_index],
+                    &game_mode,
+                    cards_in_play[hand_index],
+                    init_card,
+                ) {
                     points_from_announs[actual_player_index % 2] += 20;
                 }
             }
             print_cards_in_play(&cards_in_play, win_hand_index);
             //win_hand_index is the same index as first player of next turn
+            //cards_comapre() returns winning card index, which represents
+            //the number of positions from the initial card (win_hand_index)
             win_hand_index = (win_hand_index + cards_compare(&cards_in_play, &game_mode)) % 4;
             println!(
                 "Strongest card is the {:?} of {:?}",
@@ -133,24 +146,13 @@ fn run() {
 
             //assume indexes 0 and 2 are of one team, as well as 1 and 3
             point_decks[win_hand_index % 2].append(&mut cards_in_play);
-        }//round's over
+        } //round's over
 
-        
         println!("\nThe round is over!");
         println!(
             "Added 10 points to team #{} for getting last trick\n",
             (win_hand_index % 2) + 1
         );
-
-        points_game = point_count(&point_decks, &game_mode);
-
-        //check for kapo
-        for index in 0..2 {
-            if point_decks[index].is_empty() {
-                println!("Kapo! Team #{} gets 90 points extra!", ((index % 2) + 1) + 1);
-                points_game[(index + 1) % 2] += 90;
-            }
-        }
 
         //add last 10 to team that got last trick
         match game_mode {
@@ -168,7 +170,20 @@ fn run() {
                 }
             }
         }
+        points_game = point_count(&point_decks, &game_mode);
 
+        //check for kapo
+        for index in 0..2 {
+            if point_decks[index].is_empty() {
+                println!(
+                    "Kapo! Team #{} gets 90 points extra!",
+                    ((index % 2) + 1) + 1
+                );
+                points_game[(index + 1) % 2] += 90;
+            }
+        }
+
+        //print points from game
         println!();
         for index in 0..2 {
             println!(
@@ -179,12 +194,16 @@ fn run() {
         }
 
         //vutrene check
-        if points_game[(player_last_bid_index % 2) + 1] > points_game[player_last_bid_index % 2] {
-            points_game[(player_last_bid_index % 2) + 1] += points_game[player_last_bid_index % 2];
+        if points_game[(player_last_bid_index + 1) % 2] > points_game[player_last_bid_index % 2] {
+            points_game[(player_last_bid_index + 1) % 2] += points_game[player_last_bid_index % 2];
             points_game[player_last_bid_index % 2] = 0;
-            println!("Team #{} is inside!", player_last_bid_index % 2 );
-            println!("Team #{} gets all points!", (player_last_bid_index % 2) + 1);
+            println!("Team #{} is inside!", (player_last_bid_index % 2) + 1);
+            println!(
+                "Team #{} gets all points!",
+                ((player_last_bid_index + 1) % 2) + 1
+            );
             println!();
+            //print points from game again
             for index in 0..2 {
                 println!(
                     "Team #{}'s points from game: {}",
@@ -193,10 +212,10 @@ fn run() {
                 );
             }
         }
-
         println!();
+
+        //round points according to game mode
         for index in 0..2 {
-            //round points according to game mode
             let round_limit = match game_mode {
                 OneTrump(_) => 6,
                 AllTrumps => 4,
@@ -213,47 +232,62 @@ fn run() {
                 points_total[index]
             );
         } //points_game is now rounded
-        
+
         //check for hanging
         //NOTE: check for hanging happens AFTER rounding the score
-        
         if points_game[0] == points_game[1] {
             hanging_points += points_game[0];
             println!("The game is hanging!");
-            println!("Added points to team #{} and {} are hanging for next game!", (player_last_bid_index % 2) + 1, hanging_points);
-        
+            println!(
+                "Added points to team #{} and {} are hanging for next game!",
+                (player_last_bid_index % 2) + 1,
+                hanging_points
+            );
         //check to add hanging points
         } else if hanging_points != 0 {
-        
             let team_win_index = if points_game[0] > points_game[1] {
                 0
             } else {
                 1
             };
             points_game[team_win_index] += hanging_points;
-            println!("Team #{} gets the {} hanging points!", team_win_index, hanging_points);
+            println!(
+                "Team #{} gets the {} hanging points!",
+                team_win_index, hanging_points
+            );
             //reset hanging points
             hanging_points = 0;
         }
 
-        for index in 0..2 {
-            if points_total[index] >= 151 {
-                if points_total[(index + 1) % 2] < 151 {
-                    //one team is >= 151, other isn't - winner
-                    println!("Team #{} is the winner!", index + 1);
-                    break;
-                }
-                //both teams >=151
-                if points_total[index] > points_total[(index + 1) % 2] {
-                    //one team has more points
-                    println!("Team #{} is the winner!", index + 1);
-                    break;
-                }
-                //both team have equal points
-                println!("Both teams have 151 but are equal! Starting another game...");
+        //check for winner
+        if points_total[0] >= 151 || points_total[1] >= 151 {
+            //at least one team has >=151
+            if points_total[0] < 151 {
+                //one team is >= 151, other isn't - winner
+                println!("Team #{} is the winner!", 1);
+                break;
             }
+            if points_total[1] < 151 {
+                //one team is >= 151, other isn't - winner
+                println!("Team #{} is the winner!", 0);
+                break;
+            }
+            //both teams >=151
+            if points_total[0] > points_total[1] {
+                //one team has more points
+                println!("Team #{} is the winner!", 0);
+                break;
+            }
+            if points_total[1] > points_total[0] {
+                //one team has more points
+                println!("Team #{} is the winner!", 1);
+                break;
+            }
+            //both team have equal points and are >=151
+            println!("Both teams have >=151 but are equal! Starting another game...");
         }
-        //move first player with one
+
+        //move first player of next game with one
         init_hand_index = (init_hand_index + 1) % 4;
         println!("Enter any key to continue");
         user_input();
@@ -272,22 +306,28 @@ fn belot_check(hand: &Vec<Card>, game_mode: &GameMode, played_card: Card, init_c
         match game_mode {
             NoTrumps => return false,
             AllTrumps => {
-                if played_card.suit == init_card.suit {  
-                    if hand.contains(&Card{suit: played_card.suit, value: second_belot_card}) {
+                if played_card.suit == init_card.suit {
+                    if hand.contains(&Card {
+                        suit: played_card.suit,
+                        value: second_belot_card,
+                    }) {
                         println!("Belot! Added 20 points");
                         return true;
                     }
                 }
-            },
+            }
             OneTrump(trump_suit) => {
                 if played_card.suit == *trump_suit {
-                    if hand.contains(&Card{suit: played_card.suit, value: second_belot_card}) {
+                    if hand.contains(&Card {
+                        suit: played_card.suit,
+                        value: second_belot_card,
+                    }) {
                         println!("Belot! Added 20 points");
 
                         return true;
                     }
                 }
-            },
+            }
             Pass => panic!("Pass shouldn't be possible at belot_check()"),
         }
     }
@@ -295,6 +335,9 @@ fn belot_check(hand: &Vec<Card>, game_mode: &GameMode, played_card: Card, init_c
 }
 
 fn bidding(init_player: usize) -> (GameMode, usize) {
+    //ask players to bid, returns game mode when passes game's conditions
+    //returns index of last player who bid (required for unrelated checks)
+
     let mut last_game_mode_index = 0;
     let mut current_player = init_player;
     let mut pass_counter = 0;
@@ -302,6 +345,7 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
     loop {
         println!("player #{}", current_player + 1);
         let mut current_bid;
+        //check if bidding has occured
         if last_game_mode_index == 0 {
             println!("No one has bid yet");
             current_bid = ask_bid(current_player, 7);
@@ -309,19 +353,19 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
             println!(
                 "Current bid: {} from player #{}",
                 match last_game_mode_index {
-                    1 => "AllTrumps",
-                    2 => "NoTrumps",
-                    3 => "OneTrump(Spades)",
-                    4 => "OneTrump(Hearts)",
-                    5 => "OneTrump(Diamonds)",
-                    6 => "OneTrump(Clubs)",
+                    1 => "All Trumps",
+                    2 => "No Trumps",
+                    3 => "Spades",
+                    4 => "Hearts",
+                    5 => "Diamonds",
+                    6 => "Clubs",
                     _ => panic!("at bidding() user input out of bounds!"),
                 },
                 last_player_who_bid + 1
             );
             current_bid = ask_bid(current_player, last_game_mode_index);
         };
-        //check if pass
+        //check if not pass
         if current_bid != 0 {
             last_game_mode_index = current_bid;
             last_player_who_bid = current_player;
@@ -338,25 +382,27 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
             }
         }
 
-        current_player += 1;
-        if current_player > 3 {
-            current_player = 0;
-        }
+        //move player to ask with one
+        current_player = (current_player + 1) % 4;
     }
 
-    (match last_game_mode_index {
-        0 => Pass,
-        1 => AllTrumps,
-        2 => NoTrumps,
-        3 => OneTrump(Spades),
-        4 => OneTrump(Hearts),
-        5 => OneTrump(Diamonds),
-        6 => OneTrump(Clubs),
-        _ => panic!("at bidding() user input out of bounds!"),
-    }, last_player_who_bid)
+    (
+        match last_game_mode_index {
+            0 => Pass,
+            1 => AllTrumps,
+            2 => NoTrumps,
+            3 => OneTrump(Spades),
+            4 => OneTrump(Hearts),
+            5 => OneTrump(Diamonds),
+            6 => OneTrump(Clubs),
+            _ => panic!("at bidding() user input out of bounds!"),
+        },
+        last_player_who_bid,
+    )
 }
 
 fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
+    //prints possible bidding options and returns user input
     let game_mode_string = [
         "Pass",
         "AllTrumps",
@@ -862,7 +908,7 @@ fn continue_game(
         match game_mode {
             NoTrumps => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             AllTrumps => hands[index] = sort_hand(&mut hands[index], TRUMP_ORDER),
-//can make it to sort trump suit in trump order
+            //can make it to sort trump suit in trump order
             OneTrump(trump_suit) => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             Pass => (),
         }
@@ -877,7 +923,7 @@ fn continue_game(
             }
         }
     }
-    //validating cards sequences 
+    //validating cards sequences
     let mut highest_sequences: [usize; 2] = [0, 0];
     for index in 0..2 {
         for val in sequence_values[index].iter() {
@@ -886,17 +932,21 @@ fn continue_game(
             }
         }
     }
-    if highest_sequences[0] != 0 && highest_sequences[1] != 0 {
+    //this if doesn't do anything yet
+    if highest_sequences[0] >= 3 && highest_sequences[1] >= 3 {
         //case where both teams have card sequences
         if highest_sequences[0] == highest_sequences[1] {
+            //highest seqns are equal
             println!("The highest sequences are of equal length");
-            //compare sequences' highest card and compare them
+            //...
+            //TBD: Compare highest cards from highest seqncs
         } else {
+            //one team has a higher sequence than other
             if highest_sequences[0] > highest_sequences[1] {
-                println!("Team #1's card sequences are longer");
+                println!("Team #1 has longer card sequence");
                 println!("Team #2's card sequences don't count");
             } else {
-                println!("Team #2's card sequences are longer");
+                println!("Team #2 has longer card sequence");
                 println!("Team #1's card sequences don't count");
             }
         }
