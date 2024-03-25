@@ -23,29 +23,20 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 
 //THIS VERSION FOLLOWS THE belot.bg RULES
 //(PLUS OPINIONS/PREFERENCES FROM FRIENDS)
-//can create and shuffle deck
-//can print all or one hand
-//can add cards to hands
-//can compare cards based on the game mode
-//can check for cards in a row
-//can check for carre (4 cards of equal value)
-//can evaluate point system from cards
-//can take user input
-//can print the table (cards in play)
-//can add points from announcments
-//can play a card on table (only when allowed)
-//can add 10 points to team getting last trick
-//can round points at end of game
-//can get bidding from players (without contra)
-//can change first player on each round
-//can check for belot
+
+//things to clarify with buds:
+//hanging points check BEFORE or AFTER rounding
+//contra and re-contra
 //
-//i think it's fully functional! Huivei!
+//rosen - contra only on alltrumps
+//ioan - whole game is hanging, hang after rounding up, contra's can be bid raised
 //
 //TO BE DONE:
 //bidding's contra
-//vutrene and kapo
-//compare tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
+//finish comparing tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
+//test hanging points
+//test vutrene
+//test kapo
 //
 //Possible idea: since there are a million versions, make a different
 //variant, each following certain rules
@@ -62,26 +53,11 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //(example: teammate called clubs and game mode is alltrumps, when no dominant card
 //is available, play clubs)
 //quite easy to have a couple of difficulties, too (i think)
-//
-//possible big additions:
-//gui
-//multiplayer
-//bots (whether to play with them solo or replace a missing player)
-//shiii this could be an actual complete game
+
 fn main() {
     run();
 }
-//order of events:
-//1 - new deck, new hands, each of 5 cards
-//2 - bidding, restart if 4 passes !!!
-//3 - add 3 cards to each hand
-//4 - start of game, first player plays card
-//5 - all other players respond, strongest card takes
-//6 - repeat until cards are over
-//7 - 2 vecs - of each team, count points
-//8 - add points to each team
-//9 - repeat with next player starting, until team has >=151 points
-//10 - repeat
+
 fn run() {
     let mut points_total: [usize; 2] = [0, 0];
     let mut points_game: [usize; 2];
@@ -90,11 +66,14 @@ fn run() {
     //(or randomize it)
     let mut init_hand_index: usize = 0;
     let mut win_hand_index = init_hand_index;
+
+    //variable that keeps track of hanging points throughout games
+    let mut hanging_points = 0;
     loop {
         win_hand_index = init_hand_index;
         points_game = [0, 0];
         let (mut hands, mut deck) = new_game();
-        let game_mode: GameMode = bidding(win_hand_index);
+        let (game_mode, player_last_bid_index) = bidding(win_hand_index);
         match game_mode {
             Pass => {
                 println!("\nAll players passed! Restarting...\n");
@@ -154,16 +133,24 @@ fn run() {
 
             //assume indexes 0 and 2 are of one team, as well as 1 and 3
             point_decks[win_hand_index % 2].append(&mut cards_in_play);
-        }
+        }//round's over
 
-        //round's over
+        
         println!("\nThe round is over!");
         println!(
             "Added 10 points to team #{} for getting last trick\n",
             (win_hand_index % 2) + 1
         );
 
-        points_game = point_count(point_decks, &game_mode);
+        points_game = point_count(&point_decks, &game_mode);
+
+        //check for kapo
+        for index in 0..2 {
+            if point_decks[index].is_empty() {
+                println!("Kapo! Team #{} gets 90 points extra!", ((index % 2) + 1) + 1);
+                points_game[(index + 1) % 2] += 90;
+            }
+        }
 
         //add last 10 to team that got last trick
         match game_mode {
@@ -190,6 +177,23 @@ fn run() {
                 points_game[index]
             );
         }
+
+        //vutrene check
+        if points_game[(player_last_bid_index % 2) + 1] > points_game[player_last_bid_index % 2] {
+            points_game[(player_last_bid_index % 2) + 1] += points_game[player_last_bid_index % 2];
+            points_game[player_last_bid_index % 2] = 0;
+            println!("Team #{} is inside!", player_last_bid_index % 2 );
+            println!("Team #{} gets all points!", (player_last_bid_index % 2) + 1);
+            println!();
+            for index in 0..2 {
+                println!(
+                    "Team #{}'s points from game: {}",
+                    index + 1,
+                    points_game[index]
+                );
+            }
+        }
+
         println!();
         for index in 0..2 {
             //round points according to game mode
@@ -208,6 +212,28 @@ fn run() {
                 index + 1,
                 points_total[index]
             );
+        } //points_game is now rounded
+        
+        //check for hanging
+        //NOTE: check for hanging happens AFTER rounding the score
+        
+        if points_game[0] == points_game[1] {
+            hanging_points += points_game[0];
+            println!("The game is hanging!");
+            println!("Added points to team #{} and {} are hanging for next game!", (player_last_bid_index % 2) + 1, hanging_points);
+        
+        //check to add hanging points
+        } else if hanging_points != 0 {
+        
+            let team_win_index = if points_game[0] > points_game[1] {
+                0
+            } else {
+                1
+            };
+            points_game[team_win_index] += hanging_points;
+            println!("Team #{} gets the {} hanging points!", team_win_index, hanging_points);
+            //reset hanging points
+            hanging_points = 0;
         }
 
         for index in 0..2 {
@@ -268,7 +294,7 @@ fn belot_check(hand: &Vec<Card>, game_mode: &GameMode, played_card: Card, init_c
     false
 }
 
-fn bidding(init_player: usize) -> GameMode {
+fn bidding(init_player: usize) -> (GameMode, usize) {
     let mut last_game_mode_index = 0;
     let mut current_player = init_player;
     let mut pass_counter = 0;
@@ -318,7 +344,7 @@ fn bidding(init_player: usize) -> GameMode {
         }
     }
 
-    match last_game_mode_index {
+    (match last_game_mode_index {
         0 => Pass,
         1 => AllTrumps,
         2 => NoTrumps,
@@ -327,7 +353,7 @@ fn bidding(init_player: usize) -> GameMode {
         5 => OneTrump(Diamonds),
         6 => OneTrump(Clubs),
         _ => panic!("at bidding() user input out of bounds!"),
-    }
+    }, last_player_who_bid)
 }
 
 fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
@@ -422,7 +448,7 @@ fn check_carre(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2
         }
     }
 }
-fn point_count(point_decks: [Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] {
+fn point_count(point_decks: &[Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] {
     //takes 2 decks and transforms cards into points for each team
     //
     //TO BE DONE:
@@ -851,6 +877,7 @@ fn continue_game(
             }
         }
     }
+    //validating cards sequences 
     let mut highest_sequences: [usize; 2] = [0, 0];
     for index in 0..2 {
         for val in sequence_values[index].iter() {
