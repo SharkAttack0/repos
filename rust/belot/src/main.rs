@@ -1,13 +1,7 @@
-#![allow(unused)]
-
-use std::default;
-use std::fmt::write;
 use std::io;
-use std::iter;
 use std::panic;
 use std::usize;
 
-use rand::seq::index;
 use rand::seq::SliceRandom;
 use strum::*;
 
@@ -24,32 +18,42 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //THIS VERSION FOLLOWS THE belot.bg RULES
 //(PLUS OPINIONS/PREFERENCES FROM FRIENDS)
 
-//things to clarify with buds:
-//hanging points check BEFORE or AFTER rounding
-//contra and re-contra
+//THINGS TO CLARIFY:
+//  N - Null
+//  0-hanging points check BEFORE or AFTER rounding
+//      0 - Before
+//      1 - After
+//  1-hanging points whole game or half
+//      0 - half (add half to non-declared team)
+//      1 - whole
+//  2-contra and re-contra
+//      0 - Only on AllTrumps
+//      1 - Always available
+//  3-what can you call after a contra?
+//      0 - only re-contra
+//      1 - higher bid or re-contra
 //
-//rosen - contra only on alltrumps
-//ioan - whole game is hanging, hang after rounding up, contra's can be bid raised
+//
+//rosen - 0-N, 1-N, 2-0, 3-N,
+//ioan - 0-1, 1-1, 2-N, 3-1,
 //
 //TO BE DONE:
-//bidding's contra
-//finish comparing tierces/quarters/quintes and remove the weaker ones (do so for carre if necessary)
+//  bidding's contra
+//  finish comparing card sequences
 //
-//Possible idea: since there are a million versions, make a different
-//variant, each following certain rules
+//REFACTORING
 //
-//BEFORE BOTS: REFACTOR THE DAMN THING (AND PUT IT IN SEPERATE FILES)
+//QOF UPDATES:
+//  don't print and don't count cards witch are not valid (also required for bots)
 //
-//at first look, bots seem to be quite easy to add (and to make them good, too)
-//when game is compeletely finished, add bots
-//idea for bots: put card_validation() in a for each card in hand cycle
-//get vec of legal cards to be played and create condition to decide
-//which one to play (or simply randomize it)
-//if bot is first, get dominant cards and play them first
-//add awareness of teammate's changed bid?
-//(example: teammate called clubs and game mode is alltrumps, when no dominant card
-//is available, play clubs)
-//quite easy to have a couple of difficulties, too (i think)
+//MAKE INSTANCE FOR EACH VERSION
+//
+//BOTS:
+//  get vec of legal cards to be played and create condition to decide
+//  which one to play (or simply randomize it)
+//  get dominant cards and play them first
+//  awareness of teammate's changed bid?
+//  bots get better cards (niki idea)
 
 fn main() {
     run();
@@ -60,7 +64,7 @@ fn run() {
     //total points for both teams
     let mut points_total: [usize; 2] = [0, 0];
     //first player who bids and playes first card
-    let mut init_hand_index: usize = 0;
+    let mut init_hand_index = 0;
     //variable that keeps track of hanging points throughout games
     let mut hanging_points = 0;
 
@@ -70,7 +74,7 @@ fn run() {
         //most important var - keeps track of trick's winner
         let mut win_hand_index = init_hand_index;
         //points from current game
-        let mut points_game = [0, 0];
+        let mut points_game: [usize; 2];
         //points from announcments (obsolete for NoTrumps)
         let mut points_from_announs: [usize; 2] = [0, 0];
         //decks of cards formed by winning tricks
@@ -95,12 +99,9 @@ fn run() {
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
 
         //actual playing
-        for card_index in 0..hands[0].len() {
+        for _ in 0..hands[0].len() {
             //init_card value here should never be of actual use
-            let mut init_card = Card {
-                value: Seven,
-                suit: Clubs,
-            };
+            let mut init_card: Card;
             //for for current turn
             for hand_index in 0..4 {
                 let actual_player_index = (hand_index + win_hand_index) % 4;
@@ -223,7 +224,7 @@ fn run() {
             if points_game[index] % 10 >= round_limit {
                 points_game[index] += 10;
             }
-            points_total[index] += (points_game[index] / 10);
+            points_total[index] += points_game[index] / 10;
             println!(
                 "Team #{}'s total points: {}",
                 index + 1,
@@ -342,11 +343,11 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
     let mut last_player_who_bid = 4;
     loop {
         println!("player #{}", current_player + 1);
-        let mut current_bid;
+        let current_bid;
         //check if bidding has occured
         if last_game_mode_index == 0 {
             println!("No one has bid yet");
-            current_bid = ask_bid(current_player, 7);
+            current_bid = ask_bid(7);
         } else {
             println!(
                 "Current bid: {} from player #{}",
@@ -361,7 +362,7 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
                 },
                 last_player_who_bid + 1
             );
-            current_bid = ask_bid(current_player, last_game_mode_index);
+            current_bid = ask_bid(last_game_mode_index);
         };
         //check if not pass
         if current_bid != 0 {
@@ -399,7 +400,7 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
     )
 }
 
-fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
+fn ask_bid(last_game_mode_index: usize) -> usize {
     //prints possible bidding options and returns user input
     let game_mode_string = [
         "Pass",
@@ -418,7 +419,7 @@ fn ask_bid(player: usize, last_game_mode_index: usize) -> usize {
     user_input_to_int(last_game_mode_index)
 }
 
-fn check_cards_sequence(hand: &Vec<Card>) -> Vec<usize> {
+fn check_cards_sequence(hand: &Vec<Card>) -> (Vec<usize>, Vec<Card>) {
     //sorts hand, returns 4 ints for cards in a highest row of same suit
     //DOESN'T WORK IN 1 CASE - IN CASE OF 2 SEQUENCES IN
     //SAME SUIT, WILL REGISTER ONLY 1 (excluding cases of quinte)
@@ -431,29 +432,42 @@ fn check_cards_sequence(hand: &Vec<Card>) -> Vec<usize> {
 
     for spec_suit in CardSuits::iter() {
         //temp highest results
-        let mut row_value: usize = 1;
+        let mut row_value: usize = 0;
         let mut temp_row_value: usize = 1;
-        let mut temp_highest_card: Card = Card { value: Seven, suit: Clubs};
-
+        let mut temp_highest_card: Card = Card {
+            value: Seven,
+            suit: Clubs,
+        };
+        let mut highest_index = 1;
         for index in 0..hand.len() - 1 {
             if hand[index].suit == spec_suit && hand[index + 1].suit == spec_suit {
                 //check if current and next card are in a row
                 if cards_actual_value[index] == cards_actual_value[index + 1] - 1 {
                     temp_row_value += 1;
+                    highest_index = index + 1;
                 } else {
                     //sequence ends, record results
                     if temp_row_value > row_value {
                         row_value = temp_row_value;
-                        temp_highest_card = hand[index + 1];
+                        temp_highest_card = hand[index];
                     }
                     temp_row_value = 1;
                 }
+            } else {
+                break;
             }
         }
-        max_card_seqs.push(temp_highest_card);
-        hand_sequence_values.push(row_value);
+        //do check again incase else case never occurs
+        if temp_row_value > row_value {
+            row_value = temp_row_value;
+            temp_highest_card = hand[highest_index];
+        }
+        if row_value >= 3 {
+            max_card_seqs.push(temp_highest_card);
+            hand_sequence_values.push(row_value);
+        }
     }
-    hand_sequence_values
+    (hand_sequence_values, max_card_seqs)
 }
 
 fn check_carre(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2]) {
@@ -607,7 +621,7 @@ fn user_input_to_int(max_allowed_int: usize) -> usize {
 }
 
 fn ask_play_card(hand: &mut Vec<Card>) -> usize {
-    let mut ans_int;
+    let ans_int;
     println!("Choose a card:");
     print_hand(hand, true);
     ans_int = user_input_to_int(hand.len());
@@ -730,7 +744,7 @@ fn card_validation(
     card_to_play
 }
 
-fn print_cards_in_play(cards_in_play: &Vec<Card>, mut first_card_index: usize) {
+fn print_cards_in_play(cards_in_play: &Vec<Card>, first_card_index: usize) {
     //prints cards_in_play depending on their count and first playing player
     for index in 0..cards_in_play.len() {
         println!(
@@ -765,7 +779,6 @@ fn cards_actual_value(hand: &Vec<Card>, sort_way: [CardValue; 8]) -> Vec<usize> 
 
 fn sort_hand(hand: &mut Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
     //takes hand, returns sorted (by suit, by value, weakest to strongest)
-    let mut sorted_hand: Vec<Card> = Vec::new();
     let mut card_regular_value: Vec<usize> = cards_actual_value(&hand, sort_way);
 
     for index in 0..hand.len() {
@@ -778,10 +791,10 @@ fn sort_hand(hand: &mut Vec<Card>, sort_way: [CardValue; 8]) -> Vec<Card> {
                 temp_j = j;
             }
         }
-        let mut temp = hand[index];
+        let temp = hand[index];
         hand[index] = hand[temp_j];
         hand[temp_j] = temp;
-        let mut temp_card_regular_value = card_regular_value[index];
+        let temp_card_regular_value = card_regular_value[index];
         card_regular_value[index] = card_regular_value[temp_j];
         card_regular_value[temp_j] = temp_card_regular_value;
     }
@@ -911,13 +924,31 @@ fn continue_game(
     println!("\nContinuing game!");
     println!("Added 3 more cards to each hand. Good luck!\n");
     let mut sequence_values: [Vec<usize>; 2] = [vec![], vec![]];
+    let mut max_card_seq: [Vec<Card>; 2] = [vec![], vec![]];
+    //sorting hands' cards
     for index in 0..4 {
-        //sorting hands' cards
         match game_mode {
             NoTrumps => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
             AllTrumps => hands[index] = sort_hand(&mut hands[index], TRUMP_ORDER),
             //can make it to sort trump suit in trump order
-            OneTrump(trump_suit) => hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER),
+            OneTrump(trump_suit) => {
+                //sort in no trump order first
+                hands[index] = sort_hand(&mut hands[index], NO_TRUMP_ORDER);
+                //remove trump cards
+                let mut trump_cards: Vec<Card> = Vec::new();
+                for card_index in 0..hands[index].len() {
+                    let card = hands[index][card_index];
+                    if card.suit == *trump_suit {
+                        trump_cards.push(card);
+                    }
+                }
+                //remove trump cards from hand
+                hands[index].retain(|card| card.suit != *trump_suit);
+                //push properly sorted trump cards
+                //NOTE: trump cards are being added at end of sequence always
+                //(although incidental, its actually nice)
+                hands[index].extend(sort_hand(&mut trump_cards, TRUMP_ORDER));
+            }
             Pass => (),
         }
         println!("player #{}:", index + 1);
@@ -928,10 +959,16 @@ fn continue_game(
             NoTrumps => (),
             _ => {
                 check_carre(&hands[index], index, points_from_announs);
-                sequence_values[index % 2].extend(check_cards_sequence(&hands[index]));
+                let (temp_seq_cal, temp_max_card_seq) = check_cards_sequence(&hands[index]);
+                sequence_values[index % 2].extend(temp_seq_cal);
+                max_card_seq[index % 2].extend(temp_max_card_seq);
             }
         }
     }
+    println!(
+        "seq_val:{:?}\t max_card_seq:{:#?}",
+        sequence_values, max_card_seq
+    );
     //validating cards sequences
     let mut highest_sequences: [usize; 2] = [0, 0];
     for index in 0..2 {
@@ -990,7 +1027,7 @@ fn continue_game(
             }
         }
     }
-        
+
     hands
 }
 
