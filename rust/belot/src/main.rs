@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::io;
 use std::panic;
 use std::usize;
@@ -39,7 +40,7 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //
 //TO BE DONE:
 //  bidding's contra
-//  finish comparing card sequences
+//  test comparing card sequences
 //
 //REFACTORING
 //
@@ -453,8 +454,6 @@ fn check_cards_sequence(hand: &Vec<Card>) -> (Vec<usize>, Vec<Card>) {
                     }
                     temp_row_value = 1;
                 }
-            } else {
-                break;
             }
         }
         //do check again incase else case never occurs
@@ -462,14 +461,124 @@ fn check_cards_sequence(hand: &Vec<Card>) -> (Vec<usize>, Vec<Card>) {
             row_value = temp_row_value;
             temp_highest_card = hand[highest_index];
         }
-        if row_value >= 3 {
-            max_card_seqs.push(temp_highest_card);
-            hand_sequence_values.push(row_value);
-        }
+        max_card_seqs.push(temp_highest_card);
+        hand_sequence_values.push(row_value);
     }
     (hand_sequence_values, max_card_seqs)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_card_sequence_right() {
+        //hand has 1 not in a row card on right
+        let hand = vec![
+            Card {
+                suit: Clubs,
+                value: Eight,
+            },
+            Card {
+                suit: Clubs,
+                value: Nine,
+            },
+            Card {
+                suit: Clubs,
+                value: Ace,
+            },
+            Card {
+                suit: Clubs,
+                value: Ten,
+            },
+            Card {
+                suit: Clubs,
+                value: Jack,
+            },
+            Card {
+                suit: Clubs,
+                value: Queen,
+            },
+        ];
+        assert_eq!(
+            check_cards_sequence(&hand),
+            (
+                vec![5],
+                vec![Card {
+                    suit: Clubs,
+                    value: Queen,
+                }]
+            )
+        )
+    }
+    #[test]
+    fn test_card_sequence_left() {
+        //hand has 1 not in a row card on left
+        let hand = vec![
+            Card {
+                suit: Clubs,
+                value: Eight,
+            },
+            Card {
+                suit: Clubs,
+                value: Ace,
+            },
+            Card {
+                suit: Clubs,
+                value: Ten,
+            },
+            Card {
+                suit: Clubs,
+                value: Jack,
+            },
+            Card {
+                suit: Clubs,
+                value: Queen,
+            },
+        ];
+        assert_eq!(
+            check_cards_sequence(&hand),
+            (
+                vec![3],
+                vec![Card {
+                    suit: Clubs,
+                    value: Queen,
+                }]
+            )
+        )
+    }
+    #[test]
+    fn test_card_sequence_trim() {
+        //hand is only of cards in a row
+        let hand = vec![
+            Card {
+                suit: Diamonds,
+                value: Ace,
+            },
+            Card {
+                suit: Clubs,
+                value: Ace,
+            },
+            Card {
+                suit: Diamonds,
+                value: King,
+            },
+            Card {
+                suit: Diamonds,
+                value: Queen,
+            },
+        ];
+        assert_eq!(
+            check_cards_sequence(&hand),
+            (
+                vec![3],
+                vec![Card {
+                    suit: Diamonds,
+                    value: Ace,
+                }]
+            )
+        )
+    }
+}
 fn check_carre(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2]) {
     let mut value_times = [0, 0, 0, 0, 0, 0];
     for card in hand {
@@ -518,13 +627,6 @@ fn check_carre(hand: &Vec<Card>, hand_index: usize, points_count: &mut [usize; 2
 }
 fn point_count(point_decks: &[Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2] {
     //takes 2 decks and transforms cards into points for each team
-    //
-    //TO BE DONE:
-    //  1:  take extra parameter of type [usize;2] which is total points
-    //      from announcments for each team and adds it to the points_from_decks at the end
-    //  2:  Add or remove points based on capot, vutrene and others
-    //      both additions could be in their own function
-    //
     let mut points_from_decks: [usize; 2] = [0, 0];
     for index in 0..2 {
         for card in point_decks[index].iter() {
@@ -584,10 +686,6 @@ enum PointsOrder {
     NoTrumps,
     AllTrumps,
 }
-//bidding - init player, calls,
-//next player - repeat
-//if raising bid is possible, ask each player again
-//on 3 passes in a row, start game, on 4 passes - restart
 
 fn user_input() -> String {
     let mut input = String::new();
@@ -965,10 +1063,6 @@ fn continue_game(
             }
         }
     }
-    println!(
-        "seq_val:{:?}\t max_card_seq:{:#?}",
-        sequence_values, max_card_seq
-    );
     //validating cards sequences
     let mut highest_sequences: [usize; 2] = [0, 0];
     for index in 0..2 {
@@ -978,13 +1072,32 @@ fn continue_game(
             }
         }
     }
-
+    println!("checking in a row");
     if highest_sequences[0] >= 3 && highest_sequences[1] >= 3 {
+        println!("highest pass");
         if highest_sequences[0] == highest_sequences[1] {
             //highest sequences are equal
             println!("The highest sequences are of equal length");
-            //...
-            //TBD: Compare highest cards from highest seqncs
+            let max_card_actual_val = [
+                cards_actual_value(&max_card_seq[0], REGULAR_ORDER),
+                cards_actual_value(&max_card_seq[1], REGULAR_ORDER),
+            ];
+            //seq len
+            //max seq - done
+            //seq max card - done ,
+            //[1, 0, 2, 4,      0, 0, 4, 4,     0, 1, 6, 1,   4, 1, 2, 1]
+            //
+            for index in 0..sequence_values[0].len() {
+                if sequence_values[0][index] == highest_sequences[0] {
+                    if max_card_actual_val[0][index] > max_card_actual_val[1][index] {
+                        println!("Team #1 has higher seqns values");
+                    } else if max_card_actual_val[0][index] < max_card_actual_val[1][index] {
+                        println!("Team #2 has higher seqns values");
+                    } else {
+                        println!("Max cards are equal! Dropping all sequences!");
+                    }
+                }
+            }
         } else {
             //one team has a higher sequence than other
             let team_sequence_index = if highest_sequences[0] > highest_sequences[1] {
@@ -996,39 +1109,26 @@ fn continue_game(
                 println!("Team #1's card sequences don't count");
                 1
             };
-            for val in sequence_values[team_sequence_index].iter() {
-                match val {
-                    3 => {
-                        println!("\tThis hand has tierce\n");
-                        points_from_announs[team_sequence_index] += 20;
-                    }
-                    4 => {
-                        println!("\tThis hand has a quarte\n");
-                        points_from_announs[team_sequence_index] += 50;
-                    }
-                    5 => {
-                        println!("\tWOW! This hand has a quinte\n");
-                        points_from_announs[team_sequence_index] += 100;
-                    }
-                    6 => {
-                        println!("\tWOW! This hand has a quinte\n");
-                        points_from_announs[team_sequence_index] += 100;
-                    }
-                    7 => {
-                        println!("\tWOW! This hand has a quinte\n");
-                        points_from_announs[team_sequence_index] += 100;
-                    }
-                    8 => {
-                        println!("\tWOW! 8 in a row! This hand has a quinte AND a tierce!!!\n");
-                        points_from_announs[team_sequence_index] += 120;
-                    }
-                    _ => (),
-                }
-            }
         }
     }
-
     hands
+}
+
+fn points_from_card_sequences(sequence_values: &Vec<usize>) -> usize {
+    //takes vec of sequence lenghts, turns it into points and returns
+    let mut points = 0;
+    for val in sequence_values {
+        match val {
+            3 => points += 20,
+            4 => points += 50,
+            5 => points += 100,
+            6 => points += 100,
+            7 => points += 100,
+            8 => points += 120,
+            _ => (),
+        }
+    }
+    points
 }
 
 fn generate_full_deck() -> Vec<Card> {
@@ -1050,6 +1150,8 @@ fn generate_full_deck() -> Vec<Card> {
 #[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
 enum Bidding {
     Pass,
+    Double,
+    ReDouble,
     GameMode(GameMode),
 }
 
