@@ -7,6 +7,7 @@ use rand::seq;
 use rand::seq::SliceRandom;
 use strum::*;
 
+use crate::Bidding::*;
 use crate::CardSuits::*;
 use crate::CardValue::*;
 use crate::GameMode::*;
@@ -86,16 +87,32 @@ fn run() {
         //current cards on table
         let mut cards_in_play: Vec<Card> = Vec::with_capacity(4);
         //determine game mode and player who bid (needed for checks at end)
-        let (game_mode, player_last_bid_index) = bidding(win_hand_index);
-        match game_mode {
-            Pass => {
+        let (bidding, player_last_bid_index) = bidding(win_hand_index);
+        let game_mode;
+
+        let mut double_game_mode = false;
+        let mut redouble_game_mode = false;
+
+        match bidding {
+            Bidding::Pass => {
                 println!("\nAll players passed! Restarting...\n");
                 init_hand_index = (init_hand_index + 1) % 4;
                 println!("Enter any key to continue");
                 user_input();
                 continue;
             }
-            _ => println!("\nThe game mode is {:?}\n", game_mode),
+            Bidding::GameMode(bid_game_mode) => {
+                println!("\nThe game mode is {:?}\n", bid_game_mode);
+                game_mode = bid_game_mode;
+            }
+            Bidding::Double(bid_game_mode) => {
+                double_game_mode = true;
+                game_mode = bid_game_mode;
+            }
+            Bidding::ReDouble(bid_game_mode) => {
+                redouble_game_mode = true;
+                game_mode = bid_game_mode;
+            }
         }
 
         hands = continue_game(hands, &mut deck, &game_mode, &mut points_from_announs);
@@ -168,6 +185,7 @@ fn run() {
                         index + 1,
                         points_from_announs[index]
                     );
+                    //add points from announcments
                     points_game[index] += points_from_announs[index];
                 }
             }
@@ -195,6 +213,15 @@ fn run() {
         }
 
         //vutrene check
+        let double_vutrene = if double_game_mode {
+            println!("We were playing double! Points doubled!");
+            true
+        } else if redouble_game_mode {
+            println!("We were playing redouble! Points quadrupled!");
+            true
+        } else {
+            false
+        };
         if points_game[(player_last_bid_index + 1) % 2] > points_game[player_last_bid_index % 2] {
             points_game[(player_last_bid_index + 1) % 2] += points_game[player_last_bid_index % 2];
             points_game[player_last_bid_index % 2] = 0;
@@ -203,15 +230,21 @@ fn run() {
                 "Team #{} gets all points!",
                 ((player_last_bid_index + 1) % 2) + 1
             );
-            println!();
-            //print points from game again
-            for index in 0..2 {
-                println!(
-                    "Team #{}'s points from game: {}",
-                    index + 1,
-                    points_game[index]
-                );
-            }
+        } else if double_vutrene {
+            points_game[player_last_bid_index % 2] += points_game[(player_last_bid_index + 1) % 2];
+            points_game[(player_last_bid_index + 1) % 2] = 0;
+            println!("Team #{} is inside!", ((player_last_bid_index + 1) % 2) + 1);
+            println!("Team #{} gets all points!", (player_last_bid_index % 2) + 1);
+        }
+        println!();
+
+        //print points from game again
+        for index in 0..2 {
+            println!(
+                "Team #{}'s points from game: {}",
+                index + 1,
+                points_game[index]
+            );
         }
         println!();
 
@@ -221,7 +254,6 @@ fn run() {
                 OneTrump(_) => 6,
                 AllTrumps => 4,
                 NoTrumps => 5,
-                Pass => panic!("Pass shouldn't be possible here!"),
             };
             if points_game[index] % 10 >= round_limit {
                 points_game[index] += 10;
@@ -329,13 +361,12 @@ fn belot_check(hand: &Vec<Card>, game_mode: &GameMode, played_card: Card, init_c
                     }
                 }
             }
-            Pass => panic!("Pass shouldn't be possible at belot_check()"),
         }
     }
     false
 }
 
-fn bidding(init_player: usize) -> (GameMode, usize) {
+fn bidding(init_player: usize) -> (Bidding, usize) {
     //ask players to bid, returns game mode when passes game's conditions
     //returns index of last player who bid (required for unrelated checks)
 
@@ -343,6 +374,7 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
     let mut current_player = init_player;
     let mut pass_counter = 0;
     let mut last_player_who_bid = 4;
+    let mut double_bid = false;
     loop {
         println!("player #{}", current_player + 1);
         let current_bid;
@@ -364,6 +396,7 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
                 },
                 last_player_who_bid + 1
             );
+
             current_bid = ask_bid(last_game_mode_index);
         };
         //check if not pass
@@ -390,12 +423,12 @@ fn bidding(init_player: usize) -> (GameMode, usize) {
     (
         match last_game_mode_index {
             0 => Pass,
-            1 => AllTrumps,
-            2 => NoTrumps,
-            3 => OneTrump(Spades),
-            4 => OneTrump(Hearts),
-            5 => OneTrump(Diamonds),
-            6 => OneTrump(Clubs),
+            1 => GameMode(AllTrumps),
+            2 => GameMode(NoTrumps),
+            3 => GameMode(OneTrump(Spades)),
+            4 => GameMode(OneTrump(Hearts)),
+            5 => GameMode(OneTrump(Diamonds)),
+            6 => GameMode(OneTrump(Clubs)),
             _ => panic!("at bidding() user input out of bounds!"),
         },
         last_player_who_bid,
@@ -416,6 +449,11 @@ fn ask_bid(last_game_mode_index: usize) -> usize {
     println!("\nSelect your bid: ");
     for index in 0..last_game_mode_index {
         println!("{}:\t{}", index + 1, game_mode_string[index]);
+    }
+    println!();
+    if last_game_mode_index > 1 {
+        println!("{}: \tDouble", last_game_mode_index + 1);
+        return user_input_to_int(last_game_mode_index + 1);
     }
 
     user_input_to_int(last_game_mode_index)
@@ -641,7 +679,6 @@ fn point_count(point_decks: &[Vec<Card>; 2], game_mode: &GameMode) -> [usize; 2]
                         PointsOrder::NoTrumps
                     }
                 }
-                Pass => panic!("Pass is not supposed to be possible here (point_count())"),
             };
 
             //This is 1 of 2 ways to do it:
@@ -835,7 +872,6 @@ fn card_validation(
                     break;
                 }
             }
-            Pass => panic!("Pass shouldn't be possible at ask_play_card()"),
         }
         break;
     }
@@ -922,13 +958,11 @@ fn cards_compare(cards_in_play: &Vec<Card>, game_mode: &GameMode) -> usize {
             trump_suit = *trump;
             one_trump = true;
         }
-        Pass => panic!("Pass variant is not supposed to be possbible here!"),
         _ => (),
     };
     //create vec with value of each card (value depending if its trump)
     for card in cards_in_play.iter() {
         match game_mode {
-            Pass => panic!("Pass variant is not supposed to be possbible here!"),
             OneTrump(_) => {
                 if card.suit == trump_suit {
                     card_num.push(TRUMP_ORDER.iter().position(|&r| r == card.value).unwrap());
@@ -1048,7 +1082,6 @@ fn continue_game(
                 //(although incidental, its actually nice)
                 hands[index].extend(sort_hand(&mut trump_cards, TRUMP_ORDER));
             }
-            Pass => (),
         }
         println!("player #{}:", index + 1);
         print_hand(&hands[index], false);
@@ -1172,14 +1205,13 @@ fn generate_full_deck() -> Vec<Card> {
 #[derive(Debug, PartialEq, EnumIter, Copy, Clone)]
 enum Bidding {
     Pass,
-    Double,
-    ReDouble,
+    Double(GameMode),
+    ReDouble(GameMode),
     GameMode(GameMode),
 }
 
 #[derive(Debug, PartialEq, EnumIter, Clone, Copy, Default)]
 enum GameMode {
-    Pass,
     OneTrump(CardSuits),
     #[default]
     NoTrumps,
