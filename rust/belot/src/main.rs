@@ -3,6 +3,7 @@ use std::io;
 use std::panic;
 use std::usize;
 
+use rand::seq;
 use rand::seq::SliceRandom;
 use strum::*;
 
@@ -40,7 +41,6 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //
 //TO BE DONE:
 //  bidding's contra
-//  test comparing card sequences
 //
 //REFACTORING
 //
@@ -48,6 +48,7 @@ const REGULAR_ORDER: [CardValue; 8] = [Seven, Eight, Nine, Ten, Jack, Queen, Kin
 //  don't print and don't count cards witch are not valid (also required for bots)
 //
 //MAKE INSTANCE FOR EACH VERSION
+//  test comparing card sequence
 //
 //BOTS:
 //  get vec of legal cards to be played and create condition to decide
@@ -1072,9 +1073,9 @@ fn continue_game(
             }
         }
     }
-    println!("checking in a row");
+    let mut team_sequence_index = 2;
+    let mut all_sequences_fall = false;
     if highest_sequences[0] >= 3 && highest_sequences[1] >= 3 {
-        println!("highest pass");
         if highest_sequences[0] == highest_sequences[1] {
             //highest sequences are equal
             println!("The highest sequences are of equal length");
@@ -1082,34 +1083,55 @@ fn continue_game(
                 cards_actual_value(&max_card_seq[0], REGULAR_ORDER),
                 cards_actual_value(&max_card_seq[1], REGULAR_ORDER),
             ];
-            //seq len
-            //max seq - done
-            //seq max card - done ,
-            //[1, 0, 2, 4,      0, 0, 4, 4,     0, 1, 6, 1,   4, 1, 2, 1]
-            //
-            for index in 0..sequence_values[0].len() {
-                if sequence_values[0][index] == highest_sequences[0] {
-                    if max_card_actual_val[0][index] > max_card_actual_val[1][index] {
-                        println!("Team #1 has higher seqns values");
-                    } else if max_card_actual_val[0][index] < max_card_actual_val[1][index] {
-                        println!("Team #2 has higher seqns values");
-                    } else {
-                        println!("Max cards are equal! Dropping all sequences!");
+            let mut highest_card: [usize; 2] =
+                [max_card_actual_val[0][0], max_card_actual_val[1][0]];
+            for team_index in 0..2 {
+                for index in 0..sequence_values[team_index].len() {
+                    if sequence_values[team_index][index] == highest_sequences[team_index] {
+                        if highest_card[team_index] < max_card_actual_val[team_index][index] {
+                            highest_card[team_index] = max_card_actual_val[team_index][index];
+                        }
                     }
                 }
             }
+            println!("0 - {:?} 1 - {:?}", highest_card[0], highest_card[1]);
+            if highest_card[0] == highest_card[1] {
+                println!("Both teams' highest cards of highest sequences are equal!");
+                println!("Not counting anything");
+                all_sequences_fall = true;
+            } else if highest_card[0] > highest_card[1] {
+                println!("Team #1 has higher card! Team #2's sequences are not counted!'");
+                team_sequence_index = 0;
+            } else {
+                println!("Team #2 has higher card! Team #1's sequences are not counted!'");
+                team_sequence_index = 1;
+            }
+            //determine highest card values of each max length sequence
         } else {
             //one team has a higher sequence than other
-            let team_sequence_index = if highest_sequences[0] > highest_sequences[1] {
+            if highest_sequences[0] > highest_sequences[1] {
                 println!("Team #1 has longer card sequence");
                 println!("Team #2's card sequences don't count");
-                0
+                team_sequence_index = 0;
             } else {
                 println!("Team #2 has longer card sequence");
                 println!("Team #1's card sequences don't count");
-                1
+                team_sequence_index = 1;
             };
         }
+    } else if highest_sequences[0] >= 3 {
+        println!("Team #1 has a seq, but team #2 doesn't");
+        team_sequence_index = 0;
+    } else if highest_sequences[1] >= 3 {
+        println!("Team #2 has a seq, but team #1 doesn't");
+        team_sequence_index = 1;
+    } else {
+        println!("No team has seq");
+        all_sequences_fall = true;
+    }
+    if !all_sequences_fall {
+        points_from_announs[team_sequence_index] +=
+            points_from_card_sequences(&sequence_values[team_sequence_index]);
     }
     hands
 }
